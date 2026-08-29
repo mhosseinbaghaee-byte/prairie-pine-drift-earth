@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "پویا",
+      "hasCanvas": false,
+      "bodyTextLen": 316,
+      "bodyTextHash": "06786d3078a493fffbd395f83385626e8f34a6e8b9028f92ebf459a2614f1c45",
+      "bodyTextPrefix": "سلام، من پویام. ورود پویا مربی زنده دانش و آموزش گفتگو آزمون مغز",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "پویا",
+      "hasCanvas": false,
+      "bodyTextLen": 282,
+      "bodyTextHash": "0520a94d4d0f6b24a1a37a698bcb51398f7e143ea418c19eb1587c0c8a6c06d6",
+      "bodyTextPrefix": "سلام، من پویام. پویا مربی زنده دانش و آموزش ساده متوسط عمیق گفتگ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

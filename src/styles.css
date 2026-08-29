@@ -1,0 +1,123 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --color-background: #f3ece3;
+  --color-fg: #1c1412;
+  --color-fg-muted: #6b5e57;
+  --color-fg-subtle: #8a7c74;
+  --color-surface: #ebe2d6;
+  --color-card: #faf6f0;
+  --color-border: #d9cfc3;
+  --color-ring: #a51214;
+  --color-primary: #1c1412;
+  --color-primary-foreground: #f3ece3;
+  --color-stage: #a51214;
+  --color-stage-deep: #6e0c0e;
+  --color-cream: #f6efe6;
+  --color-cream-deep: #e7d9c8;
+  --color-ink: #1c1412;
+  --color-muted: #6b5e57;
+
+  --font-sans: "Vazirmatn", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Vazirmatn", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Vazirmatn", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.35rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+
+  --duration-quick: 150ms;
+  --duration-fast: 250ms;
+  --duration-slow: 400ms;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: var(--color-background);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+}
+
+.felt-grain {
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+.stage-veil {
+  background: linear-gradient(
+    to top,
+    color-mix(in oklab, var(--color-stage-deep) 58%, transparent) 0%,
+    transparent 42%,
+    color-mix(in oklab, var(--color-stage-deep) 22%, transparent) 100%
+  );
+}
+
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-cream) 70%, transparent) 0%,
+    var(--color-cream) 45%,
+    color-mix(in oklab, var(--color-cream) 70%, transparent) 100%
+  );
+  background-size: 180% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -80% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    animation: none;
+    color: var(--color-cream);
+    background: none;
+  }
+
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
