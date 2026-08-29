@@ -70,3 +70,87 @@ export const QUIZ_TOPICS = [
   "ادبیات فارسی",
   "فناوری",
 ];
+
+/** Languages Pouya can teach / practice live conversation in */
+export type LangCode =
+  | "en"
+  | "fr"
+  | "de"
+  | "es"
+  | "it"
+  | "tr"
+  | "ar"
+  | "ru"
+  | "zh"
+  | "ja"
+  | "ko"
+  | "pt";
+
+export const LANGUAGES: {
+  code: LangCode;
+  label: string;
+  native: string;
+  flag: string;
+}[] = [
+  { code: "en", label: "انگلیسی", native: "English", flag: "🇬🇧" },
+  { code: "fr", label: "فرانسوی", native: "Français", flag: "🇫🇷" },
+  { code: "de", label: "آلمانی", native: "Deutsch", flag: "🇩🇪" },
+  { code: "es", label: "اسپانیایی", native: "Español", flag: "🇪🇸" },
+  { code: "it", label: "ایتالیایی", native: "Italiano", flag: "🇮🇹" },
+  { code: "tr", label: "ترکی", native: "Türkçe", flag: "🇹🇷" },
+  { code: "ar", label: "عربی", native: "العربية", flag: "🇸🇦" },
+  { code: "ru", label: "روسی", native: "Русский", flag: "🇷🇺" },
+  { code: "zh", label: "چینی", native: "中文", flag: "🇨🇳" },
+  { code: "ja", label: "ژاپنی", native: "日本語", flag: "🇯🇵" },
+  { code: "ko", label: "کره‌ای", native: "한국어", flag: "🇰🇷" },
+  { code: "pt", label: "پرتغالی", native: "Português", flag: "🇵🇹" },
+];
+
+export type Scenario = {
+  id: string;
+  label: string;
+  prompt: string;
+};
+
+export const SCENARIOS: Scenario[] = [
+  {
+    id: "cafe",
+    label: "کافه",
+    prompt: "Let's role-play ordering coffee and chatting in a café. You start as the barista.",
+  },
+  {
+    id: "airport",
+    label: "فرودگاه",
+    prompt: "Role-play at the airport: check-in, security, or asking for directions. You start.",
+  },
+  {
+    id: "hotel",
+    label: "هتل",
+    prompt: "Role-play checking into a hotel and asking about facilities. You are the receptionist.",
+  },
+  {
+    id: "job",
+    label: "مصاحبه شغلی",
+    prompt: "Practice a job interview. You are the interviewer. Keep questions natural.",
+  },
+  {
+    id: "daily",
+    label: "زندگی روزمره",
+    prompt: "Casual daily conversation: weather, plans, hobbies. Keep it natural and friendly.",
+  },
+  {
+    id: "travel",
+    label: "سفر",
+    prompt: "Talk about travel plans, asking for recommendations and directions.",
+  },
+  {
+    id: "shopping",
+    label: "خرید",
+    prompt: "Role-play shopping for clothes or groceries. You are the shop assistant.",
+  },
+  {
+    id: "free",
+    label: "آزاد",
+    prompt: "Free conversation. Wait for the learner to start or gently open a topic.",
+  },
+];

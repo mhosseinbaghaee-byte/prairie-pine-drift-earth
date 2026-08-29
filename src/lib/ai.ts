@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { Level } from "./topics";
+import type { LangCode } from "./topics";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -10,7 +11,8 @@ const MessageSchema = z.object({
 const ChatInput = z.object({
   messages: z.array(MessageSchema).min(1).max(16),
   level: z.enum(["kid", "teen", "adult"]),
-  mode: z.enum(["chat", "daily", "lesson"]),
+  mode: z.enum(["chat", "daily", "lesson", "live"]),
+  lang: z.string().optional(), // target language code when mode === "live"
 });
 
 const QuizInput = z.object({
@@ -26,7 +28,7 @@ const FactInput = z.object({
   level: z.enum(["kid", "teen", "adult"]),
 });
 
-export type ChatMode = "chat" | "daily" | "lesson";
+export type ChatMode = "chat" | "daily" | "lesson" | "live";
 export type QuizQuestion = {
   q: string;
   options: [string, string, string, string];
@@ -41,7 +43,22 @@ function levelLine(level: Level) {
   return "سطح: عمیق. nuance، سازوکار، و محدودیت ادعا را بگو.";
 }
 
-function systemPrompt(level: Level, mode: ChatMode) {
+const LANG_NAMES: Record<string, string> = {
+  en: "English",
+  fr: "French",
+  de: "German",
+  es: "Spanish",
+  it: "Italian",
+  tr: "Turkish",
+  ar: "Arabic",
+  ru: "Russian",
+  zh: "Chinese (Mandarin)",
+  ja: "Japanese",
+  ko: "Korean",
+  pt: "Portuguese",
+};
+
+function systemPrompt(level: Level, mode: ChatMode, lang?: string) {
   const base = `تو «پویا» هستی: مربی نمدی زنده برای آموزش و اطلاعات عمومی.
 شخصیت: گرم، کنجکاو، کمی شوخ، صمیمی — مثل یک معلم استاپ‌موشن روی صحنه قرمز، نه یک ربات خشک.
 قوانین سخت:
@@ -80,6 +97,27 @@ function systemPrompt(level: Level, mode: ChatMode) {
 زنده و پویا بنویس، نه جزوه.`;
   }
 
+  if (mode === "live") {
+    const target = LANG_NAMES[lang ?? "en"] ?? "English";
+    return `You are «پویا» (Pouya), a warm, slightly playful felt-character language coach on a red stage.
+
+Your job right now is LIVE CONVERSATION PRACTICE and language teaching for ${target}.
+
+Core rules:
+1. The learner's native language is Persian (Farsi). They may write in Persian, ${target}, or mixed.
+2. Most of your spoken replies should be in ${target} so they get maximum practice.
+3. When you correct a mistake or explain grammar/vocab, briefly switch to clear Persian so they understand, then continue in ${target}.
+4. Keep turns short and natural (1–4 sentences). This is conversation, not a lecture.
+5. Gently correct important mistakes: show the better version, explain why in one short Persian sentence if needed, then keep the conversation flowing.
+6. Ask one natural follow-up question almost every turn so the dialogue continues.
+7. Adapt difficulty to the learner's level (${level}).
+8. Never invent facts. Stay friendly and encouraging.
+9. If the learner asks for translation, grammar tip, or "how do I say X", answer clearly then return to conversation.
+10. Personality: warm, curious, a little humorous — never robotic or overly formal.
+
+Start or continue the conversation naturally based on the history.`;
+  }
+
   return `${base}
 
 حالت گفتگو:
@@ -104,7 +142,7 @@ async function grokChat(
       model: "grok-4.5",
       messages,
       max_tokens: maxTokens,
-      temperature: 0.7,
+      temperature: 0.75,
     }),
   });
 
@@ -123,12 +161,13 @@ async function grokChat(
 export const askPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => ChatInput.parse(input))
   .handler(async ({ data }) => {
+    const maxTokens = data.mode === "lesson" ? 900 : data.mode === "live" ? 450 : 800;
     return grokChat(
       [
-        { role: "system", content: systemPrompt(data.level, data.mode) },
+        { role: "system", content: systemPrompt(data.level, data.mode, data.lang) },
         ...data.messages,
       ],
-      data.mode === "lesson" ? 900 : 800,
+      maxTokens,
     );
   });
 
