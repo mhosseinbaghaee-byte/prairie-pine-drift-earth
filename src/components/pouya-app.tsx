@@ -4,6 +4,7 @@ import {
   BookOpen,
   Brain,
   GraduationCap,
+  Languages,
   MessageCircle,
   Plus,
   Send,
@@ -13,7 +14,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { askPouya, makeQuiz, speakPouya, type ChatMode, type QuizPayload } from "@/lib/ai";
-import { LEVELS, QUIZ_TOPICS, TOPICS, type Level } from "@/lib/topics";
+import {
+  LEVELS,
+  LANGUAGES,
+  QUIZ_TOPICS,
+  SCENARIOS,
+  TOPICS,
+  type LangCode,
+  type Level,
+} from "@/lib/topics";
 import {
   deleteNote,
   FOLDERS,
@@ -29,7 +38,7 @@ import { RichText } from "./rich-text";
 import { Button } from "./ui/button";
 import { Input, Textarea } from "./ui/input";
 
-type Tab = "chat" | "quiz" | "vault";
+type Tab = "chat" | "live" | "quiz" | "vault";
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
 const INTRO_KEY = "pouya-intro-seen";
@@ -42,7 +51,7 @@ function spokenSlice(text: string) {
     .trim();
   if (clean.length <= 360) return clean;
   const cut = clean.slice(0, 360);
-  const mark = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("؟"), cut.lastIndexOf("!"));
+  const mark = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("؟"), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
   return mark > 80 ? cut.slice(0, mark + 1) : cut;
 }
 
@@ -52,6 +61,7 @@ export function PouyaApp() {
   const [voiceOn, setVoiceOn] = useState(true);
   const [mood, setMood] = useState<StageMood>("intro");
   const [mode, setMode] = useState<ChatMode>("chat");
+  const [lang, setLang] = useState<LangCode>("en");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -76,6 +86,8 @@ export function PouyaApp() {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typed, busy, tab]);
 
+  const langLabel = LANGUAGES.find((l) => l.code === lang)?.label ?? "انگلیسی";
+
   const caption =
     mood === "intro"
       ? "سلام، من پویام."
@@ -85,9 +97,13 @@ export function PouyaApp() {
           ? "بزن بریم آزمون."
           : tab === "vault"
             ? "اینجا مغز دوم توست."
-            : messages.length === 0
-              ? "چی دوست داری امروز یاد بگیری؟"
-              : "گوش می‌دم.";
+            : tab === "live"
+              ? messages.length === 0
+                ? `آمادهٔ تمرین ${langLabel}`
+                : "گوش می‌دم…"
+              : messages.length === 0
+                ? "چی دوست داری امروز یاد بگیری؟"
+                : "گوش می‌دم.";
 
   async function playVoice(text: string) {
     if (!voiceOn) return;
@@ -124,12 +140,15 @@ export function PouyaApp() {
     });
   }
 
-  async function send(text: string, nextMode: ChatMode = mode) {
+  async function send(text: string, nextMode: ChatMode = mode, nextLang?: LangCode) {
     const content = text.trim();
     if (!content || busy) return;
+    const useLang = nextLang ?? lang;
     setMode(nextMode);
+    if (nextLang) setLang(nextLang);
     setDraft("");
-    setTab("chat");
+    if (nextMode === "live") setTab("live");
+    else setTab("chat");
     const history: ChatMsg[] = [...messages, { role: "user", content }];
     setMessages(history);
     setBusy(true);
@@ -141,6 +160,7 @@ export function PouyaApp() {
           messages: history.slice(-12),
           level,
           mode: nextMode,
+          lang: nextMode === "live" ? useLang : undefined,
         },
       });
       if (!res.ok) {
@@ -166,7 +186,7 @@ export function PouyaApp() {
     audioRef.current?.pause();
     setMessages([]);
     setTyped("");
-    setMode("chat");
+    setMode(tab === "live" ? "live" : "chat");
     setMood("idle");
   }
 
@@ -180,22 +200,31 @@ export function PouyaApp() {
     toast.success("در مغز دوم ذخیره شد.");
   }
 
+  function startScenario(prompt: string) {
+    void send(prompt, "live", lang);
+  }
+
   return (
     <div className="flex min-h-dvh flex-col bg-background text-fg lg:h-dvh lg:flex-row" dir="ltr">
       <div className="relative lg:w-[42%] lg:shrink-0">
-        <PouyaStage mood={mood} caption={caption} compact={tab !== "chat" || messages.length > 0} />
+        <PouyaStage
+          mood={mood}
+          caption={caption}
+          compact={(tab !== "chat" && tab !== "live") || messages.length > 0}
+        />
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background" dir="rtl">
         <header className="flex items-center gap-2 border-b border-border px-3 py-2.5 sm:px-5">
           <div className="min-w-0 flex-1">
             <p className="font-display text-base font-medium tracking-tight">پویا</p>
-            <p className="text-xs text-fg-muted">مربی زنده دانش و آموزش</p>
+            <p className="text-xs text-fg-muted">مربی زنده دانش و زبان</p>
           </div>
           <nav className="flex rounded-lg bg-surface p-1" aria-label="بخش‌ها">
             {(
               [
                 ["chat", "گفتگو", MessageCircle],
+                ["live", "زبان", Languages],
                 ["quiz", "آزمون", GraduationCap],
                 ["vault", "مغز دوم", Brain],
               ] as const
@@ -203,7 +232,11 @@ export function PouyaApp() {
               <button
                 key={id}
                 type="button"
-                onClick={() => setTab(id)}
+                onClick={() => {
+                  setTab(id);
+                  if (id === "live") setMode("live");
+                  else if (id === "chat") setMode("chat");
+                }}
                 className={cn(
                   "flex h-10 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors duration-quick",
                   tab === id ? "bg-cream text-ink" : "text-fg-muted hover:text-fg",
@@ -237,6 +270,28 @@ export function PouyaApp() {
             onSave={() => saveLast()}
           />
         ) : null}
+
+        {tab === "live" ? (
+          <LivePane
+            messages={messages}
+            typed={typed}
+            busy={busy}
+            draft={draft}
+            setDraft={setDraft}
+            level={level}
+            setLevel={setLevel}
+            voiceOn={voiceOn}
+            setVoiceOn={setVoiceOn}
+            lang={lang}
+            setLang={setLang}
+            scrollerRef={scrollerRef}
+            onSend={(t) => void send(t, "live")}
+            onScenario={startScenario}
+            onNew={newChat}
+            onSave={() => saveLast()}
+          />
+        ) : null}
+
         {tab === "quiz" ? <QuizPane level={level} setMood={setMood} /> : null}
         {tab === "vault" ? <VaultPane /> : null}
       </div>
@@ -364,7 +419,7 @@ function ChatPane({
           <div className="mx-auto flex max-w-xl flex-col gap-4">
             {mode !== "chat" ? (
               <p className="text-xs text-fg-muted">
-                {mode === "daily" ? "حالت مرور روزانه" : "حالت درس کوتاه"}
+                {mode === "daily" ? "حالت مرور روزانه" : mode === "lesson" ? "حالت درس کوتاه" : ""}
               </p>
             ) : null}
             {messages.map((m, i) => (
@@ -400,6 +455,185 @@ function ChatPane({
               }
             }}
             placeholder="بپرس، یا بگو چه چیزی را می‌خواهی بفهمی…"
+            className="max-h-32 min-h-12 flex-1 rounded-lg py-3"
+            disabled={busy}
+          />
+          <Button type="submit" size="icon" disabled={busy || !draft.trim()} aria-label="ارسال">
+            <Send className="size-4" />
+          </Button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+function LivePane({
+  messages,
+  typed,
+  busy,
+  draft,
+  setDraft,
+  level,
+  setLevel,
+  voiceOn,
+  setVoiceOn,
+  lang,
+  setLang,
+  scrollerRef,
+  onSend,
+  onScenario,
+  onNew,
+  onSave,
+}: {
+  messages: ChatMsg[];
+  typed: string;
+  busy: boolean;
+  draft: string;
+  setDraft: (v: string) => void;
+  level: Level;
+  setLevel: (v: Level) => void;
+  voiceOn: boolean;
+  setVoiceOn: (v: boolean) => void;
+  lang: LangCode;
+  setLang: (v: LangCode) => void;
+  scrollerRef: RefObject<HTMLDivElement | null>;
+  onSend: (t: string) => void;
+  onScenario: (prompt: string) => void;
+  onNew: () => void;
+  onSave: () => void;
+}) {
+  const empty = messages.length === 0 && !typed;
+  const currentLang = LANGUAGES.find((l) => l.code === lang);
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 sm:px-5">
+        <div className="flex rounded-md bg-surface p-0.5">
+          {LEVELS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              title={l.hint}
+              onClick={() => setLevel(l.id)}
+              className={cn(
+                "h-8 rounded-sm px-2.5 text-xs transition-colors",
+                level === l.id ? "bg-cream text-ink" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setVoiceOn(!voiceOn)}
+          aria-pressed={voiceOn}
+        >
+          {voiceOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+          <span className="hidden sm:inline">{voiceOn ? "صدا روشن" : "بی‌صدا"}</span>
+        </Button>
+        <div className="flex-1" />
+        <Button variant="ghost" size="sm" onClick={onNew}>
+          گفتگوی تازه
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onSave} disabled={!messages.some((m) => m.role === "assistant")}>
+          <Bookmark className="size-4" />
+          ذخیره
+        </Button>
+      </div>
+
+      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+        {empty ? (
+          <div className="mx-auto flex max-w-xl flex-col gap-6 pt-2">
+            <div>
+              <h1 className="font-display text-2xl font-medium tracking-tight text-balance sm:text-3xl">
+                گفتگوی زنده · آموزش زبان
+              </h1>
+              <p className="mt-2 max-w-md text-sm leading-normal text-fg-muted text-pretty">
+                زبان را انتخاب کن، یک سناریو بزن یا مستقیم شروع به حرف زدن کن. پویا با تو تمرین می‌کند،
+                اشتباهات را نرم تصحیح می‌کند و توضیح کوتاه به فارسی می‌دهد.
+              </p>
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs text-fg-muted">زبان هدف</p>
+              <div className="flex flex-wrap gap-2">
+                {LANGUAGES.map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    onClick={() => setLang(l.code)}
+                    className={cn(
+                      "h-10 rounded-full border px-3.5 text-sm transition-colors",
+                      lang === l.code
+                        ? "border-stage bg-cream text-ink"
+                        : "border-border bg-card hover:border-stage/40",
+                    )}
+                  >
+                    <span className="me-1.5">{l.flag}</span>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs text-fg-muted">
+                سناریو برای {currentLang?.native ?? "English"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {SCENARIOS.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => onScenario(s.prompt)}
+                    className="h-10 rounded-full border border-border bg-card px-3.5 text-sm text-fg transition-colors hover:border-stage/40 hover:bg-cream"
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto flex max-w-xl flex-col gap-4">
+            <p className="text-xs text-fg-muted">
+              گفتگوی زنده · {currentLang?.flag} {currentLang?.label}
+            </p>
+            {messages.map((m, i) => (
+              <Bubble key={i} role={m.role} text={m.content} />
+            ))}
+            {typed ? <Bubble role="assistant" text={typed} live /> : null}
+            {busy && !typed ? (
+              <div className="flex items-center gap-2 text-sm text-fg-muted">
+                <span className="size-1.5 animate-pulse rounded-full bg-stage" />
+                پویا دارد فکر می‌کند
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      <form
+        className="border-t border-border bg-background p-3 sm:px-5 sm:pb-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSend(draft);
+        }}
+      >
+        <div className="mx-auto flex max-w-xl items-end gap-2">
+          <Textarea
+            value={draft}
+            rows={1}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onSend(draft);
+              }
+            }}
+            placeholder={`به ${currentLang?.native ?? "English"} یا فارسی بنویس…`}
             className="max-h-32 min-h-12 flex-1 rounded-lg py-3"
             disabled={busy}
           />
