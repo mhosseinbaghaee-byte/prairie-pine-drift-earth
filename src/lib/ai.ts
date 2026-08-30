@@ -125,60 +125,199 @@ Start or continue the conversation naturally based on the history.`;
 اگر کاربر خواست آزمون یا درس، همان را بده.`;
 }
 
-async function grokChat(
-  messages: { role: "system" | "user" | "assistant"; content: string }[],
-  maxTokens: number,
-) {
+// ---------------------------------------------------------------------------
+// Multi-provider AI layer
+//
+// The app no longer depends on a single vendor. Each provider below reads its
+// own API key from the environment; only providers with a key set are tried.
+// Order of attempts is controlled by AI_PROVIDER_ORDER (comma separated,
+// e.g. "anthropic,openai,xai,gemini"). If unset, the default order below is
+// used. The first provider that returns a successful, non-empty response
+// wins — if it fails or its key is missing, the next one in line is tried
+// automatically, so the app keeps working even if one vendor is down, out of
+// quota, or simply not configured.
+// ---------------------------------------------------------------------------
+
+type ChatMsg = { role: "user" | "assistant"; content: string };
+type ChatResult = { ok: true; text: string } | { ok: false; error: string };
+
+const DEFAULT_PROVIDER_ORDER = ["anthropic", "openai", "xai", "gemini"] as const;
+type ProviderName = (typeof DEFAULT_PROVIDER_ORDER)[number];
+
+function providerOrder(): ProviderName[] {
+  const raw = process.env.AI_PROVIDER_ORDER;
+  if (!raw) return [...DEFAULT_PROVIDER_ORDER];
+  const list = raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter((s): s is ProviderName => (DEFAULT_PROVIDER_ORDER as readonly string[]).includes(s));
+  return list.length ? list : [...DEFAULT_PROVIDER_ORDER];
+}
+
+async function callXai(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
   const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) return { ok: false as const, error: "AI is not available" };
-
-  const res = await fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "grok-4.5",
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.75,
-    }),
-  });
-
-  if (!res.ok) {
-    if (res.status === 403) return { ok: false as const, error: "quota" };
-    return { ok: false as const, error: "unavailable" };
+  if (!apiKey) return null;
+  try {
+    const res = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: process.env.XAI_MODEL || "grok-4.5",
+        messages: [{ role: "system", content: system }, ...history],
+        max_tokens: maxTokens,
+        temperature: 0.75,
+      }),
+    });
+    if (!res.ok) return { ok: false, error: res.status === 403 ? "quota" : "unavailable" };
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!text) return { ok: false, error: "empty response" };
+    return { ok: true, text };
+  } catch {
+    return { ok: false, error: "unavailable" };
   }
-  const body = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-  if (!text) return { ok: false as const, error: "پاسخ خالی آمد" };
-  return { ok: true as const, text };
+}
+
+async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [{ role: "system", content: system }, ...history],
+        max_tokens: maxTokens,
+        temperature: 0.75,
+      }),
+    });
+    if (!res.ok) return { ok: false, error: res.status === 429 ? "quota" : "unavailable" };
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!text) return { ok: false, error: "empty response" };
+    return { ok: true, text };
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+async function callAnthropic(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5",
+        system,
+        messages: history,
+        max_tokens: maxTokens,
+        temperature: 0.75,
+      }),
+    });
+    if (!res.ok) return { ok: false, error: res.status === 429 ? "quota" : "unavailable" };
+    const body = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const text = (body.content ?? [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text ?? "")
+      .join("")
+      .trim();
+    if (!text) return { ok: false, error: "empty response" };
+    return { ok: true, text };
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: history.map((m) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }],
+          })),
+          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.75 },
+        }),
+      },
+    );
+    if (!res.ok) return { ok: false, error: res.status === 429 ? "quota" : "unavailable" };
+    const body = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const text = (body.candidates?.[0]?.content?.parts ?? [])
+      .map((p) => p.text ?? "")
+      .join("")
+      .trim();
+    if (!text) return { ok: false, error: "empty response" };
+    return { ok: true, text };
+  } catch {
+    return { ok: false, error: "unavailable" };
+  }
+}
+
+const PROVIDERS: Record<ProviderName, typeof callXai> = {
+  xai: callXai,
+  openai: callOpenAI,
+  anthropic: callAnthropic,
+  gemini: callGemini,
+};
+
+/**
+ * Try each configured AI provider in order until one succeeds.
+ * Providers with no API key set are skipped silently. A provider that
+ * returns an error (quota, network, empty response) is logged and the next
+ * one is tried. If every provider fails, the last error is returned.
+ */
+async function chatComplete(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult> {
+  let lastError = "AI is not available";
+  let triedAny = false;
+
+  for (const name of providerOrder()) {
+    const call = PROVIDERS[name];
+    const result = await call(system, history, maxTokens);
+    if (result === null) continue; // no API key for this provider
+    triedAny = true;
+    if (result.ok) return result;
+    console.error(`[pouya-ai] provider "${name}" failed:`, result.error);
+    lastError = result.error;
+  }
+
+  if (!triedAny) {
+    return {
+      ok: false,
+      error:
+        "No AI provider is configured. Set at least one of ANTHROPIC_API_KEY, OPENAI_API_KEY, XAI_API_KEY, or GEMINI_API_KEY.",
+    };
+  }
+  return { ok: false, error: lastError };
 }
 
 export const askPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => ChatInput.parse(input))
   .handler(async ({ data }) => {
     const maxTokens = data.mode === "lesson" ? 900 : data.mode === "live" ? 450 : 800;
-    return grokChat(
-      [
-        { role: "system", content: systemPrompt(data.level, data.mode, data.lang) },
-        ...data.messages,
-      ],
-      maxTokens,
-    );
+    return chatComplete(systemPrompt(data.level, data.mode, data.lang), data.messages, maxTokens);
   });
 
 export const makeQuiz = createServerFn({ method: "POST" })
   .validator((input: unknown) => QuizInput.parse(input))
   .handler(async ({ data }) => {
-    const result = await grokChat(
-      [
-        {
-          role: "system",
-          content: `تو طراح آزمون آموزشی هستی. فقط JSON معتبر برگردان، بدون markdown و بدون توضیح اضافه.
+    const system = `تو طراح آزمون آموزشی هستی. فقط JSON معتبر برگردان، بدون markdown و بدون توضیح اضافه.
 شکل دقیق:
 {"topic":"string","questions":[{"q":"string","options":["a","b","c","d"],"correct":0,"why":"string"}]}
 قوانین:
@@ -188,13 +327,11 @@ export const makeQuiz = createServerFn({ method: "POST" })
 - why یک توضیح ۲ تا ۳ جمله‌ای درست و آموزنده
 - زبان فارسی روان
 - ${levelLine(data.level)}
-- واقعیت ساختگی نساز`,
-        },
-        {
-          role: "user",
-          content: `آزمون اطلاعات عمومی / آموزشی درباره: ${data.topic}`,
-        },
-      ],
+- واقعیت ساختگی نساز`;
+
+    const result = await chatComplete(
+      system,
+      [{ role: "user", content: `آزمون اطلاعات عمومی / آموزشی درباره: ${data.topic}` }],
       1200,
     );
     if (!result.ok) return result;
@@ -226,42 +363,73 @@ export const makeQuiz = createServerFn({ method: "POST" })
 export const dailyFact = createServerFn({ method: "POST" })
   .validator((input: unknown) => FactInput.parse(input))
   .handler(async ({ data }) => {
-    return grokChat(
-      [
-        {
-          role: "system",
-          content: `تو پویا هستی. یک «دانستی امروز» کوتاه، زنده و دقیق بنویس.
+    const system = `تو پویا هستی. یک «دانستی امروز» کوتاه، زنده و دقیق بنویس.
 ساختار: عنوان یک خطی، بعد ۳ تا ۵ جمله، بعد یک جمله «چرا مهم است».
-فارسی روان. بدون ایموجی. ${levelLine(data.level)} واقعیت ساختگی نساز.`,
-        },
-        { role: "user", content: "دانستی امروز را بگو؛ موضوع را خودت انتخاب کن، غافلگیرکننده باشد." },
-      ],
+فارسی روان. بدون ایموجی. ${levelLine(data.level)} واقعیت ساختگی نساز.`;
+
+    return chatComplete(
+      system,
+      [{ role: "user", content: "دانستی امروز را بگو؛ موضوع را خودت انتخاب کن، غافلگیرکننده باشد." }],
       400,
     );
   });
 
+// ---------------------------------------------------------------------------
+// Text-to-speech
+//
+// Only xAI and OpenAI are wired for TTS today (Anthropic and Gemini don't
+// offer a comparable simple TTS endpoint at time of writing). xAI is tried
+// first if configured, then OpenAI. If neither key is present, voice is
+// simply unavailable and the app falls back to text-only silently.
+// ---------------------------------------------------------------------------
+
+async function speakXai(text: string): Promise<{ ok: true; audio: string; mime: string } | null> {
+  const apiKey = process.env.XAI_API_KEY;
+  if (!apiKey) return null;
+  const res = await fetch("https://api.x.ai/v1/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      text,
+      voice_id: "zagan",
+      language: "auto",
+      output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 },
+      speed: 1.0,
+    }),
+  });
+  if (!res.ok) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { ok: true, audio: buf.toString("base64"), mime: "audio/mpeg" };
+}
+
+async function speakOpenAI(text: string): Promise<{ ok: true; audio: string; mime: string } | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  const res = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: process.env.OPENAI_TTS_MODEL || "tts-1",
+      voice: process.env.OPENAI_TTS_VOICE || "alloy",
+      input: text,
+      response_format: "mp3",
+    }),
+  });
+  if (!res.ok) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { ok: true, audio: buf.toString("base64"), mime: "audio/mpeg" };
+}
+
 export const speakPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => SpeakInput.parse(input))
   .handler(async ({ data }) => {
-    const apiKey = process.env.XAI_API_KEY;
-    if (!apiKey) return { ok: false as const, error: "AI is not available" };
-
     const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 420);
-    const res = await fetch("https://api.x.ai/v1/tts", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        text,
-        voice_id: "zagan",
-        language: "auto",
-        output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 },
-        speed: 1.0,
-      }),
-    });
-    if (!res.ok) return { ok: false as const, error: "unavailable" };
-    const buf = Buffer.from(await res.arrayBuffer());
-    return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+
+    const xai = await speakXai(text);
+    if (xai) return xai;
+
+    const openai = await speakOpenAI(text);
+    if (openai) return openai;
+
+    return { ok: false as const, error: "unavailable" };
   });
