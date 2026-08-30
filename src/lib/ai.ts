@@ -141,7 +141,7 @@ Start or continue the conversation naturally based on the history.`;
 type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string } | { ok: false; error: string };
 
-const DEFAULT_PROVIDER_ORDER = ["anthropic", "openai", "xai", "gemini"] as const;
+const DEFAULT_PROVIDER_ORDER = ["gemini", "anthropic", "openai", "xai"] as const;
 type ProviderName = (typeof DEFAULT_PROVIDER_ORDER)[number];
 
 function providerOrder(): ProviderName[] {
