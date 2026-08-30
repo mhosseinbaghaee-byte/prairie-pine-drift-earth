@@ -26,7 +26,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string } | { ok: false; error: string };
 
 type ProviderName = "xai" | "openai" | "anthropic" | "gemini";
-const DEFAULT_PROVIDER_ORDER: ProviderName[] = ["xai", "gemini", "openai", "anthropic"];
+const DEFAULT_PROVIDER_ORDER: ProviderName[] = ["gemini"];
 
 function levelLine(level: Level) {
   if (level === "kid") return "سطح: خیلی ساده، تصویری، جمله‌های کوتاه. مثل توضیح برای یک کودک کنجکاو.";
@@ -71,12 +71,7 @@ Keep replies short and natural (1–4 sentences), mostly in ${target}. Correct i
 }
 
 function providerOrder(): ProviderName[] {
-  const raw = process.env.AI_PROVIDER_ORDER;
-  if (!raw) return [...DEFAULT_PROVIDER_ORDER];
-  const parsed = raw.split(",").map((s) => s.trim().toLowerCase()).filter((s): s is ProviderName =>
-    ["xai", "openai", "anthropic", "gemini"].includes(s),
-  );
-  return parsed.length ? parsed : [...DEFAULT_PROVIDER_ORDER];
+  return ["gemini"];
 }
 
 async function readError(res: Response): Promise<string> {
@@ -85,93 +80,13 @@ async function readError(res: Response): Promise<string> {
     if (typeof body.error === "string") return body.error;
     if (body.error?.message) return body.error.message;
     if (body.message) return body.message;
-  } catch {
-    // ignore non-JSON error bodies
-  }
+  } catch {}
   return `HTTP ${res.status}`;
 }
 
-async function callXai(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
-  const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) return null;
-
-  try {
-    // Use xAI's current Responses API. It is the recommended API for new
-    // integrations and avoids the old chat-completions parameter mismatch
-    // that was producing HTTP 400 in the previous implementation.
-    const res = await fetch("https://api.x.ai/v1/responses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: process.env.XAI_MODEL || "grok-4.5",
-        input: [{ role: "system", content: system }, ...history],
-        max_output_tokens: maxTokens,
-      }),
-    });
-
-    if (!res.ok) {
-      const detail = await readError(res);
-      console.error(`[pouya-ai] xAI ${res.status}: ${detail}`);
-      return { ok: false, error: `xAI ${res.status}: ${detail}` };
-    }
-
-    const body = (await res.json()) as {
-      output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
-    };
-    const text = (body.output ?? [])
-      .flatMap((item) => item.content ?? [])
-      .filter((part) => part.type === "output_text" && typeof part.text === "string")
-      .map((part) => part.text ?? "")
-      .join("")
-      .trim();
-
-    if (!text) return { ok: false, error: "xAI returned an empty response" };
-    return { ok: true, text };
-  } catch (error) {
-    console.error("[pouya-ai] xAI network error", error);
-    return { ok: false, error: "xAI network error" };
-  }
-}
-
-async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: process.env.OPENAI_MODEL || "gpt-4o-mini", messages: [{ role: "system", content: system }, ...history], max_tokens: maxTokens }),
-    });
-    if (!res.ok) return { ok: false, error: `OpenAI ${res.status}: ${await readError(res)}` };
-    const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-    return text ? { ok: true, text } : { ok: false, error: "OpenAI returned an empty response" };
-  } catch {
-    return { ok: false, error: "OpenAI network error" };
-  }
-}
-
-async function callAnthropic(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5", system, messages: history, max_tokens: maxTokens }),
-    });
-    if (!res.ok) return { ok: false, error: `Anthropic ${res.status}: ${await readError(res)}` };
-    const body = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-    const text = (body.content ?? []).filter((x) => x.type === "text").map((x) => x.text ?? "").join("").trim();
-    return text ? { ok: true, text } : { ok: false, error: "Anthropic returned an empty response" };
-  } catch {
-    return { ok: false, error: "Anthropic network error" };
-  }
-}
-
 async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) return { ok: false, error: "Gemini API key is not configured on Vercel." };
   try {
     const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
@@ -192,26 +107,8 @@ async function callGemini(system: string, history: ChatMsg[], maxTokens: number)
   }
 }
 
-const PROVIDERS: Record<ProviderName, typeof callXai> = {
-  xai: callXai,
-  openai: callOpenAI,
-  anthropic: callAnthropic,
-  gemini: callGemini,
-};
-
 async function chatComplete(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult> {
-  let lastError = "AI is not available";
-  let triedAny = false;
-  for (const name of providerOrder()) {
-    const result = await PROVIDERS[name](system, history, maxTokens);
-    if (result === null) continue;
-    triedAny = true;
-    if (result.ok) return result;
-    console.error(`[pouya-ai] provider ${name} failed:`, result.error);
-    lastError = result.error;
-  }
-  if (!triedAny) return { ok: false, error: "No AI provider is configured on Vercel." };
-  return { ok: false, error: lastError };
+  return (await callGemini(system, history, maxTokens)) ?? { ok: false, error: "Gemini is unavailable" };
 }
 
 export const askPouya = createServerFn({ method: "POST" })
@@ -254,23 +151,6 @@ export const dailyFact = createServerFn({ method: "POST" })
     400,
   ));
 
-async function speakXai(text: string): Promise<{ ok: true; audio: string; mime: string } | null> {
-  const apiKey = process.env.XAI_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch("https://api.x.ai/v1/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ text, voice_id: "zagan", language: "auto", output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 }, speed: 1.0 }),
-    });
-    if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    return { ok: true, audio: buf.toString("base64"), mime: "audio/mpeg" };
-  } catch {
-    return null;
-  }
-}
-
 async function speakOpenAI(text: string): Promise<{ ok: true; audio: string; mime: string } | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -292,8 +172,6 @@ export const speakPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => SpeakInput.parse(input))
   .handler(async ({ data }) => {
     const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 420);
-    const xai = await speakXai(text);
-    if (xai) return xai;
     const openai = await speakOpenAI(text);
     if (openai) return openai;
     return { ok: false as const, error: "unavailable" };
