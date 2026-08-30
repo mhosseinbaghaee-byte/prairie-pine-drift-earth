@@ -67,6 +67,7 @@ export function PouyaApp() {
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const voiceActiveRef = useRef(false);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -114,10 +115,15 @@ export function PouyaApp() {
       const url = `data:${res.mime};base64,${res.audio}`;
       const audio = new Audio(url);
       audioRef.current = audio;
+      voiceActiveRef.current = true;
       setMood("talk");
-      audio.onended = () => setMood("idle");
+      audio.onended = () => {
+        voiceActiveRef.current = false;
+        setMood("idle");
+      };
       await audio.play();
     } catch {
+      voiceActiveRef.current = false;
       /* voice is optional */
     }
   }
@@ -154,6 +160,7 @@ export function PouyaApp() {
     setBusy(true);
     setMood("think");
     audioRef.current?.pause();
+    voiceActiveRef.current = false;
     try {
       const res = await askPouya({
         data: {
@@ -173,7 +180,11 @@ export function PouyaApp() {
       await typeOut(res.text);
       setMessages([...history, { role: "assistant", content: res.text }]);
       setTyped("");
-      setMood("idle");
+      // If voice actually started playing, let its own onended event decide
+      // when to go back to idle — otherwise the video cut back to idle after
+      // ~3s of typing while the speech (which can run much longer) kept
+      // playing, so the mouth/mood looked out of sync with the audio.
+      if (!voiceActiveRef.current) setMood("idle");
     } catch {
       toast.error("ارتباط برقرار نشد. دوباره امتحان کن.");
       setMood("idle");
@@ -184,6 +195,7 @@ export function PouyaApp() {
 
   function newChat() {
     audioRef.current?.pause();
+    voiceActiveRef.current = false;
     setMessages([]);
     setTyped("");
     setMode(tab === "live" ? "live" : "chat");
