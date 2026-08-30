@@ -1,0 +1,49 @@
+name: Fix Gemini provider
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Gemini-first provider and key aliases
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/lib/ai.ts')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('const DEFAULT_PROVIDER_ORDER: ProviderName[] = ["xai", "gemini", "openai", "anthropic"];', 'const DEFAULT_PROVIDER_ORDER: ProviderName[] = ["gemini", "xai", "openai", "anthropic"];')
+          old = '''function providerOrder(): ProviderName[] {
+  const raw = process.env.AI_PROVIDER_ORDER;
+  if (!raw) return [...DEFAULT_PROVIDER_ORDER];
+  const parsed = raw.split(",").map((s) => s.trim().toLowerCase()).filter((s): s is ProviderName =>
+    ["xai", "openai", "anthropic", "gemini"].includes(s),
+  );
+  return parsed.length ? parsed : [...DEFAULT_PROVIDER_ORDER];
+}'''
+          new = '''function providerOrder(): ProviderName[] {
+  const raw = process.env.AI_PROVIDER_ORDER;
+  if (!raw) return [...DEFAULT_PROVIDER_ORDER];
+  const parsed = raw.split(",").map((s) => s.trim().toLowerCase()).filter((s): s is ProviderName =>
+    ["xai", "openai", "anthropic", "gemini"].includes(s),
+  );
+  return ["gemini", ...parsed.filter((name) => name !== "gemini")];
+}'''
+          s = s.replace(old, new)
+          s = s.replace('const apiKey = process.env.GEMINI_API_KEY;\n  if (!apiKey) return null;', 'const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;\n  if (!apiKey) return null;', 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit patch and remove temporary workflow
+        run: |
+          rm -f .github/workflows/fix-gemini-provider.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/ai.ts .github/workflows/fix-gemini-provider.yml
+          git commit -m "fix: make Gemini first and support Google API key aliases"
+          git push
