@@ -14,12 +14,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { askPouya, makeQuiz, speakPouya, type ChatMode, type QuizPayload } from "@/lib/ai";
+import { localQuiz, localTutorReply } from "@/lib/library";
 import {
   LEVELS,
   LANGUAGES,
   QUIZ_TOPICS,
   SCENARIOS,
   TOPICS,
+  langById,
   type LangCode,
   type Level,
 } from "@/lib/topics";
@@ -108,24 +110,39 @@ export function PouyaApp() {
 
   async function playVoice(text: string) {
     if (!voiceOn) return;
+    const spoken = spokenSlice(text);
     try {
-      const res = await speakPouya({ data: { text: spokenSlice(text) } });
-      if (!res.ok) return;
-      audioRef.current?.pause();
-      const url = `data:${res.mime};base64,${res.audio}`;
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      voiceActiveRef.current = true;
-      setMood("talk");
-      audio.onended = () => {
-        voiceActiveRef.current = false;
-        setMood("idle");
-      };
-      await audio.play();
+      const res = await speakPouya({ data: { text: spoken, lang: langById(lang).locale } });
+      if (res.ok) {
+        audioRef.current?.pause();
+        window.speechSynthesis?.cancel();
+        const url = `data:${res.mime};base64,${res.audio}`;
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        voiceActiveRef.current = true;
+        setMood("talk");
+        audio.onended = () => {
+          voiceActiveRef.current = false;
+          setMood("idle");
+        };
+        await audio.play();
+        return;
+      }
     } catch {
       voiceActiveRef.current = false;
-      /* voice is optional */
     }
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(spoken);
+    utter.lang = langById(lang).locale;
+    utter.rate = 1;
+    utter.onend = () => {
+      voiceActiveRef.current = false;
+      setMood("idle");
+    };
+    voiceActiveRef.current = true;
+    setMood("talk");
+    window.speechSynthesis.speak(utter);
   }
 
   function typeOut(text: string) {
@@ -170,24 +187,24 @@ export function PouyaApp() {
           lang: nextMode === "live" ? useLang : undefined,
         },
       });
-      if (!res.ok) {
-        toast.error(res.error === "AI is not available" ? "هوش مصنوعی الان در دسترس نیست." : res.error);
-        setMood("idle");
-        return;
-      }
+      const reply =
+        res && typeof res === "object" && "ok" in res && res.ok && "text" in res && typeof res.text === "string"
+          ? res.text
+          : localTutorReply({ messages: history.slice(-12), mode: nextMode, lang: useLang });
       setMood("talk");
-      void playVoice(res.text);
-      await typeOut(res.text);
-      setMessages([...history, { role: "assistant", content: res.text }]);
+      void playVoice(reply);
+      await typeOut(reply);
+      setMessages([...history, { role: "assistant", content: reply }]);
       setTyped("");
-      // If voice actually started playing, let its own onended event decide
-      // when to go back to idle — otherwise the video cut back to idle after
-      // ~3s of typing while the speech (which can run much longer) kept
-      // playing, so the mouth/mood looked out of sync with the audio.
       if (!voiceActiveRef.current) setMood("idle");
     } catch {
-      toast.error("ارتباط برقرار نشد. دوباره امتحان کن.");
-      setMood("idle");
+      const reply = localTutorReply({ messages: history.slice(-12), mode: nextMode, lang: useLang });
+      setMood("talk");
+      void playVoice(reply);
+      await typeOut(reply);
+      setMessages([...history, { role: "assistant", content: reply }]);
+      setTyped("");
+      if (!voiceActiveRef.current) setMood("idle");
     } finally {
       setBusy(false);
     }
@@ -699,17 +716,17 @@ function QuizPane({
     setDone(false);
     try {
       const res = await makeQuiz({ data: { topic: custom.trim() || topic, level } });
-      if (!res.ok) {
-        toast.error(res.error === "AI is not available" ? "هوش مصنوعی الان در دسترس نیست." : res.error);
-        setMood("idle");
-        return;
-      }
-      setQuiz(res.quiz);
+      const nextQuiz =
+        res && typeof res === "object" && "ok" in res && res.ok && "quiz" in res && res.quiz
+          ? res.quiz
+          : localQuiz(custom.trim() || topic);
+      setQuiz(nextQuiz);
       setMood("talk");
       window.setTimeout(() => setMood("idle"), 1800);
     } catch {
-      toast.error("آزمون ساخته نشد.");
-      setMood("idle");
+      setQuiz(localQuiz(custom.trim() || topic));
+      setMood("talk");
+      window.setTimeout(() => setMood("idle"), 1800);
     } finally {
       setLoading(false);
     }

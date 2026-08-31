@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import type { Level } from "./topics";
+import { localQuiz, localTutorReply, todayFact, type QuizPayload, type QuizQuestion } from "./library";
+import { langById, type Level } from "./topics";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -9,24 +10,32 @@ const MessageSchema = z.object({
 
 const ChatInput = z.object({
   messages: z.array(MessageSchema).min(1).max(16),
-  level: z.enum(["kid", "teen", "adult"]),
-  mode: z.enum(["chat", "daily", "lesson", "live"]),
-  lang: z.string().optional(),
+  level: z.enum(["kid", "teen", "adult"]).catch("teen"),
+  mode: z.enum(["chat", "daily", "lesson", "live", "language"]).catch("chat"),
+  lang: z.string().min(1).max(16).optional(),
 });
 
-const QuizInput = z.object({ topic: z.string().min(1).max(80), level: z.enum(["kid", "teen", "adult"]) });
-const SpeakInput = z.object({ text: z.string().min(1).max(800) });
-const FactInput = z.object({ level: z.enum(["kid", "teen", "adult"]) });
+const QuizInput = z.object({
+  topic: z.string().min(1).max(80),
+  level: z.enum(["kid", "teen", "adult"]),
+});
 
-export type ChatMode = "chat" | "daily" | "lesson" | "live";
-export type QuizQuestion = { q: string; options: [string, string, string, string]; correct: number; why: string };
-export type QuizPayload = { topic: string; questions: QuizQuestion[] };
+const SpeakInput = z.object({
+  text: z.string().min(1).max(800),
+  lang: z.string().min(2).max(16).optional(),
+});
+
+const FactInput = z.object({
+  level: z.enum(["kid", "teen", "adult"]),
+});
+
+export type ChatMode = "chat" | "daily" | "lesson" | "live" | "language";
+export type { QuizQuestion, QuizPayload };
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string } | { ok: false; error: string };
 
-type ProviderName = "xai" | "openai" | "anthropic" | "gemini";
-const DEFAULT_PROVIDER_ORDER: ProviderName[] = ["gemini"];
+const XAI_MODELS = ["grok-4.5", "grok-4-fast", "grok-3"];
 
 function levelLine(level: Level) {
   if (level === "kid") return "سطح: خیلی ساده، تصویری، جمله‌های کوتاه. مثل توضیح برای یک کودک کنجکاو.";
@@ -34,145 +43,304 @@ function levelLine(level: Level) {
   return "سطح: عمیق. nuance، سازوکار، و محدودیت ادعا را بگو.";
 }
 
-const LANG_NAMES: Record<string, string> = {
-  en: "English", fr: "French", de: "German", es: "Spanish", it: "Italian", tr: "Turkish",
-  ar: "Arabic", ru: "Russian", zh: "Chinese (Mandarin)", ja: "Japanese", ko: "Korean", pt: "Portuguese",
-};
-
-function systemPrompt(level: Level, mode: ChatMode, lang?: string) {
-  const base = `تو «پویا» هستی: مربی نمدی زنده برای آموزش و اطلاعات عمومی.
-شخصیت: گرم، کنجکاو، کمی شوخ و صمیمی؛ مثل یک معلم استاپ‌موشن روی صحنه قرمز، نه یک ربات خشک.
+function systemPrompt(level: Level, mode: ChatMode, langId?: string) {
+  const lang = langById(langId || "fa");
+  const base = `تو «پویا» هستی: مربی نمدی زنده برای آموزش، اطلاعات عمومی، و آموزش زبان.
+شخصیت: گرم، کنجکاو، کمی شوخ، صمیمی — مثل یک معلم استاپ‌موشن روی صحنه قرمز، نه یک ربات خشک.
 قوانین سخت:
-- به زبان کاربر جواب بده. اگر فارسی نوشت، فارسی روان و طبیعی بنویس.
 - ${levelLine(level)}
 - اول اصل مطلب را روشن بگو، بعد در صورت نیاز عمیق‌تر شو.
+- از تشبیه ملموس استفاده کن.
 - واقعیت ساختگی نساز. اگر مطمئن نیستی، صریح بگو.
 - لحن گفتاری و زنده. از ایموجی استفاده نکن.
-- پاراگراف‌های کوتاه. پاسخ معمولاً ۱۸۰ تا ۷۰۰ کلمه باشد.`;
+- پاراگراف‌های کوتاه.`;
 
-  if (mode === "daily") return `${base}
+  if (mode === "live") {
+    return `${base}
+
+حالت گفتگوی زنده صوتی:
+زبان گفتگو: ${lang.native} (${lang.locale}).
+تقریباً همه پاسخ را به همین زبان بگو.
+جواب را کوتاه نگه دار: ۲ تا ۵ جمله، مناسب خواندن با صدا. حداکثر ۹۰ کلمه.
+در پایان یک سؤال کوتاه بپرس تا مکالمه ادامه پیدا کند.
+اگر کاربر اشتباه زبانی داشت، طبیعی تصحیح کن بدون خجالت دادن.`;
+  }
+
+  if (mode === "language") {
+    return `${base}
+
+حالت آموزش زبان:
+زبان هدف: ${lang.native} (${lang.locale}).
+زبان مادری کاربر معمولاً فارسی است.
+ساختار هر پاسخ:
+1) پاسخ یا ادامه مکالمه به زبان هدف (کوتاه، سطح‌بندی‌شده)
+2) یک خط آوانگاری ساده اگر خط زبان برای فارسی‌زبان سخت است
+3) معنی فارسی در یک جمله
+4) اگر لازم است: یک تصحیح کوتاه («بهتر است بگویی: …»)
+5) یک سؤال یا تمرین بعدی به زبان هدف
+نوبت را کوتاه نگه دار تا برای گفتگوی زنده مناسب باشد.`;
+  }
+
+  if (mode === "daily") {
+    return `${base}
 
 حالت مرور روزانه / مغز دوم:
-مثل یک مصاحبه‌گر شخصی باش. هر نوبت ۳ تا ۵ سؤال کوتاه بپرس. موضوع‌ها: کار امروز، پیشرفت، تصمیم، یادگیری، ایده، پیگیری و تمرکز بعدی. چیزی اختراع نکن.`;
-  if (mode === "lesson") return `${base}
+مثل یک مصاحبه‌گر شخصی باش. هر نوبت ۳ تا ۵ سؤال کوتاه بپرس — نه بیشتر.
+موضوع سؤال‌ها: کار امروز، پیشرفت، تصمیم، یادگیری، ایده، افراد، پیگیری، تمرکز بعدی.
+اگر جواب کلی بود یک follow-up مفید بپرس.
+وقتی اطلاعات کافی شد، یک یادداشت روزانه ساخت‌یافته پیشنهاد بده.
+زبان پاسخ: اگر کاربر فارسی نوشت فارسی، وگرنه به زبان خودش.`;
+  }
+
+  if (mode === "lesson") {
+    return `${base}
 
 حالت درس کوتاه:
-عنوان، ایده اصلی، سه بخش کوتاه، یک مثال ملموس و یک سؤال پایانی برای فکر کردن بده.`;
-  if (mode === "live") {
-    const target = LANG_NAMES[lang ?? "en"] ?? "English";
-    return `You are Pouya, a warm, slightly playful felt-character language coach.
-Practice ${target} with a Persian-speaking learner.
-Keep replies short and natural (1–4 sentences), mostly in ${target}. Correct important mistakes gently and explain corrections briefly in Persian. Ask one natural follow-up question. Adapt difficulty to ${level}. Never invent facts.`;
+ساختار ثابت:
+1) عنوان یک خطی
+2) ایده اصلی در دو جمله
+3) سه بخش کوتاه با زیرعنوان
+4) یک مثال ملموس
+5) یک سؤال پایانی برای فکر کردن
+به زبان کاربر جواب بده.`;
   }
+
   return `${base}
 
 حالت گفتگو:
-اگر سؤال باز است، پاسخ کامل بده و در پایان یک سؤال کوتاه برای ادامه گفتگو بپرس.`;
-}
-
-function providerOrder(): ProviderName[] {
-  return ["gemini"];
+به زبان کاربر جواب بده. اگر فارسی نوشت، فارسی روان بنویس.
+اگر سؤال باز است، یک پاسخ کامل بده و در آخر یک سؤال کوتاه بپرس.`;
 }
 
 async function readError(res: Response): Promise<string> {
   try {
-    const body = (await res.json()) as { error?: { message?: string } | string; message?: string };
+    const body = (await res.json()) as {
+      error?: { message?: string } | string;
+      message?: string;
+      code?: string;
+    };
     if (typeof body.error === "string") return body.error;
-    if (body.error?.message) return body.error.message;
+    if (body.error && typeof body.error === "object" && body.error.message) return body.error.message;
     if (body.message) return body.message;
-  } catch {}
+    if (body.code) return body.code;
+  } catch {
+    /* ignore */
+  }
   return `HTTP ${res.status}`;
 }
 
+async function callXai(messages: { role: "system" | "user" | "assistant"; content: string }[], maxTokens: number): Promise<ChatResult | null> {
+  const apiKey = process.env.XAI_API_KEY;
+  if (!apiKey) return null;
+
+  let last = "xAI unavailable";
+  for (const model of XAI_MODELS) {
+    try {
+      const res = await fetch("https://api.x.ai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          max_tokens: maxTokens,
+          temperature: 0.7,
+        }),
+      });
+      if (res.status === 403) return { ok: false, error: "quota" };
+      if (!res.ok) {
+        last = await readError(res);
+        continue;
+      }
+      const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+      const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+      if (text) return { ok: true, text };
+      last = "empty";
+    } catch {
+      last = "network";
+    }
+  }
+  return { ok: false, error: last };
+}
+
 async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) return { ok: false, error: "Gemini API key is not configured on Vercel." };
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) return null;
   try {
     const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-        generationConfig: { maxOutputTokens: maxTokens },
-      }),
-    });
-    if (!res.ok) return { ok: false, error: `Gemini ${res.status}: ${await readError(res)}` };
-    const body = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: history.map((m) => ({
+            role: m.role === "assistant" ? "model" : "user",
+            parts: [{ text: m.content }],
+          })),
+          generationConfig: { maxOutputTokens: maxTokens },
+        }),
+      },
+    );
+    if (!res.ok) return { ok: false, error: await readError(res) };
+    const body = (await res.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
     const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
-    return text ? { ok: true, text } : { ok: false, error: "Gemini returned an empty response" };
+    return text ? { ok: true, text } : { ok: false, error: "empty" };
   } catch {
-    return { ok: false, error: "Gemini network error" };
+    return { ok: false, error: "network" };
   }
 }
 
-async function chatComplete(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult> {
-  return (await callGemini(system, history, maxTokens)) ?? { ok: false, error: "Gemini is unavailable" };
+async function chatComplete(
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+  fallback: () => string,
+): Promise<{ ok: true; text: string }> {
+  const xai = await callXai([{ role: "system", content: system }, ...history], maxTokens);
+  if (xai?.ok) return xai;
+  const gemini = await callGemini(system, history, maxTokens);
+  if (gemini?.ok) return gemini;
+  return { ok: true, text: fallback() };
 }
 
 export const askPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => ChatInput.parse(input))
   .handler(async ({ data }) => {
-    const maxTokens = data.mode === "lesson" ? 900 : data.mode === "live" ? 450 : 800;
-    return chatComplete(systemPrompt(data.level, data.mode, data.lang), data.messages, maxTokens);
+    try {
+      const short = data.mode === "live" || data.mode === "language";
+      const maxTokens = short ? 420 : data.mode === "lesson" ? 900 : 800;
+      return await chatComplete(
+        systemPrompt(data.level, data.mode, data.lang),
+        data.messages,
+        maxTokens,
+        () => localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
+      );
+    } catch {
+      return {
+        ok: true as const,
+        text: localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
+      };
+    }
   });
 
 export const makeQuiz = createServerFn({ method: "POST" })
   .validator((input: unknown) => QuizInput.parse(input))
   .handler(async ({ data }) => {
-    const system = `تو طراح آزمون آموزشی هستی. فقط JSON معتبر برگردان، بدون markdown.
-شکل دقیق: {"topic":"string","questions":[{"q":"string","options":["a","b","c","d"],"correct":0,"why":"string"}]}
-دقیقاً ۵ سؤال بساز. correct بین ۰ تا ۳. زبان فارسی روان. ${levelLine(data.level)}`;
-    const result = await chatComplete(system, [{ role: "user", content: `آزمون آموزشی درباره: ${data.topic}` }], 1200);
-    if (!result.ok) return result;
-    const jsonText = result.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
     try {
-      const parsed = JSON.parse(jsonText) as QuizPayload;
-      if (!Array.isArray(parsed.questions) || parsed.questions.length < 4) return { ok: false as const, error: "آزمون ناقص برگشت" };
-      const questions = parsed.questions.slice(0, 5).map((q) => ({
-        q: String(q.q ?? ""),
-        options: (q.options ?? []).slice(0, 4).map(String) as QuizQuestion["options"],
-        correct: Math.min(3, Math.max(0, Number(q.correct) || 0)),
-        why: String(q.why ?? ""),
-      }));
-      if (questions.some((q) => !q.q || q.options.length !== 4)) return { ok: false as const, error: "ساختار آزمون نامعتبر است" };
-      return { ok: true as const, quiz: { topic: parsed.topic || data.topic, questions } satisfies QuizPayload };
+      const result = await chatComplete(
+        `تو طراح آزمون آموزشی هستی. فقط JSON معتبر برگردان، بدون markdown و بدون توضیح اضافه.
+شکل دقیق:
+{"topic":"string","questions":[{"q":"string","options":["a","b","c","d"],"correct":0,"why":"string"}]}
+قوانین:
+- دقیقاً ۵ سؤال چهارگزینه‌ای
+- correct ایندکس ۰ تا ۳ است
+- گزینه‌ها کوتاه و متمایز
+- why یک توضیح ۲ تا ۳ جمله‌ای درست و آموزنده
+- زبان فارسی روان
+- ${levelLine(data.level)}
+- واقعیت ساختگی نساز`,
+        [{ role: "user", content: `آزمون اطلاعات عمومی / آموزشی درباره: ${data.topic}` }],
+        1200,
+        () => "",
+      );
+
+      if (result.text) {
+        const jsonText = result.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+        try {
+          const parsed = JSON.parse(jsonText) as QuizPayload;
+          if (Array.isArray(parsed.questions) && parsed.questions.length >= 4) {
+            const questions = parsed.questions.slice(0, 5).map((q) => ({
+              q: String(q.q ?? ""),
+              options: (q.options ?? []).slice(0, 4).map(String) as QuizQuestion["options"],
+              correct: Math.min(3, Math.max(0, Number(q.correct) || 0)),
+              why: String(q.why ?? ""),
+            }));
+            if (!questions.some((q) => !q.q || q.options.length !== 4)) {
+              return {
+                ok: true as const,
+                quiz: { topic: parsed.topic || data.topic, questions } satisfies QuizPayload,
+              };
+            }
+          }
+        } catch {
+          /* fall through to local quiz */
+        }
+      }
     } catch {
-      return { ok: false as const, error: "نتوانستم آزمون را بخوانم" };
+      /* local quiz */
     }
+
+    return { ok: true as const, quiz: localQuiz(data.topic) };
   });
 
 export const dailyFact = createServerFn({ method: "POST" })
   .validator((input: unknown) => FactInput.parse(input))
-  .handler(async ({ data }) => chatComplete(
-    `تو پویا هستی. یک دانستی امروز کوتاه، زنده و دقیق بنویس. فارسی روان. بدون ایموجی. ${levelLine(data.level)}`,
-    [{ role: "user", content: "یک دانستی غافلگیرکننده و واقعی بگو." }],
-    400,
-  ));
+  .handler(async ({ data }) => {
+    try {
+      return await chatComplete(
+        `تو پویا هستی. یک «دانستی امروز» کوتاه، زنده و دقیق بنویس.
+ساختار: عنوان یک خطی، بعد ۳ تا ۵ جمله، بعد یک جمله «چرا مهم است».
+فارسی روان. بدون ایموجی. ${levelLine(data.level)} واقعیت ساختگی نساز.`,
+        [{ role: "user", content: "دانستی امروز را بگو؛ موضوع را خودت انتخاب کن، غافلگیرکننده باشد." }],
+        400,
+        () => todayFact(),
+      );
+    } catch {
+      return { ok: true as const, text: todayFact() };
+    }
+  });
 
-async function speakOpenAI(text: string): Promise<{ ok: true; audio: string; mime: string } | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-  try {
-    const res = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: process.env.OPENAI_TTS_MODEL || "tts-1", voice: process.env.OPENAI_TTS_VOICE || "alloy", input: text, response_format: "mp3" }),
-    });
-    if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    return { ok: true, audio: buf.toString("base64"), mime: "audio/mpeg" };
-  } catch {
-    return null;
-  }
+function ttsLanguage(raw?: string) {
+  const v = (raw || "auto").toLowerCase();
+  if (v === "auto" || v.startsWith("fa")) return "auto";
+  if (v.startsWith("en")) return "en";
+  if (v.startsWith("ar")) return "ar-SA";
+  if (v.startsWith("fr")) return "fr";
+  if (v.startsWith("de")) return "de";
+  if (v.startsWith("es")) return "es-ES";
+  if (v.startsWith("tr")) return "tr";
+  if (v.startsWith("it")) return "it";
+  if (v.startsWith("pt")) return "pt-BR";
+  if (v.startsWith("ru")) return "ru";
+  if (v.startsWith("zh")) return "zh";
+  if (v.startsWith("ja")) return "ja";
+  if (v.startsWith("ko")) return "ko";
+  if (v.startsWith("hi")) return "hi";
+  return "auto";
 }
 
 export const speakPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => SpeakInput.parse(input))
   .handler(async ({ data }) => {
-    const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 420);
-    const openai = await speakOpenAI(text);
-    if (openai) return openai;
-    return { ok: false as const, error: "unavailable" };
+    try {
+      const apiKey = process.env.XAI_API_KEY;
+      if (!apiKey) return { ok: false as const, error: "unavailable" };
+
+      const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 420);
+      const res = await fetch("https://api.x.ai/v1/tts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          text,
+          voice_id: "zagan",
+          language: ttsLanguage(data.lang),
+          output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 },
+          speed: 1.0,
+        }),
+      });
+      if (!res.ok) return { ok: false as const, error: "unavailable" };
+      const buf = Buffer.from(await res.arrayBuffer());
+      return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+    } catch {
+      return { ok: false as const, error: "unavailable" };
+    }
   });

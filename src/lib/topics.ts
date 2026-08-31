@@ -154,3 +154,32 @@ export const SCENARIOS: Scenario[] = [
     prompt: "Free conversation. Wait for the learner to start or gently open a topic.",
   },
 ];
+
+export type Lang = {
+  id: string;
+  label: string;
+  native: string;
+  locale: string;
+  dir: "rtl" | "ltr";
+};
+
+export const LANGS: Lang[] = [
+  { id: "fa", label: "فارسی", native: "فارسی", locale: "fa-IR", dir: "rtl" },
+  { id: "en", label: "English", native: "English", locale: "en-US", dir: "ltr" },
+  { id: "ar", label: "عربی", native: "العربية", locale: "ar-SA", dir: "rtl" },
+  { id: "fr", label: "فرانسوی", native: "Français", locale: "fr-FR", dir: "ltr" },
+  { id: "de", label: "آلمانی", native: "Deutsch", locale: "de-DE", dir: "ltr" },
+  { id: "es", label: "اسپانیایی", native: "Español", locale: "es-ES", dir: "ltr" },
+  { id: "tr", label: "ترکی", native: "Türkçe", locale: "tr-TR", dir: "ltr" },
+  { id: "it", label: "ایتالیایی", native: "Italiano", locale: "it-IT", dir: "ltr" },
+  { id: "pt", label: "پرتغالی", native: "Português", locale: "pt-BR", dir: "ltr" },
+  { id: "ru", label: "روسی", native: "Русский", locale: "ru-RU", dir: "ltr" },
+  { id: "zh", label: "چینی", native: "中文", locale: "zh-CN", dir: "ltr" },
+  { id: "ja", label: "ژاپنی", native: "日本語", locale: "ja-JP", dir: "ltr" },
+  { id: "ko", label: "کره‌ای", native: "한국어", locale: "ko-KR", dir: "ltr" },
+  { id: "hi", label: "هندی", native: "हिन्दी", locale: "hi-IN", dir: "ltr" },
+];
+
+export function langById(id: string) {
+  return LANGS.find((l) => l.id === id) ?? LANGS[0];
+}

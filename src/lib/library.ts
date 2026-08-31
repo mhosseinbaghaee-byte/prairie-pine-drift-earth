@@ -1,4 +1,10 @@
-import type { QuizPayload } from "./ai";
+export type QuizQuestion = {
+  q: string;
+  options: [string, string, string, string];
+  correct: number;
+  why: string;
+};
+export type QuizPayload = { topic: string; questions: QuizQuestion[] };
 
 export type Lesson = {
   id: string;
@@ -11,7 +17,7 @@ export const LESSONS: Lesson[] = [
   {
     id: "light",
     title: "نور چیست؟",
-    keywords: ["نور", "light", "فوتون", "رنگ", "چشم"],
+    keywords: ["نور", "light", "فوتون", "رنگ", "چشم", "علمی", "علوم"],
     body: `نور موج الکترومغناطیسی است — و همزمان بسته‌های انرژی به نام فوتون.
 
 چشم تو رنگ را «نمی‌بیند»؛ طول‌موج را ترجمه می‌کند. حدود ۳۸۰ تا ۷۵۰ نانومتر برای ما مرئی است. کوتاه‌ترش فرابنفش است، بلندترش فروسرخ. هر دو واقعی‌اند، فقط گیرندهٔ ما برایشان ساخته نشده.
@@ -39,8 +45,8 @@ export const LESSONS: Lesson[] = [
   {
     id: "achaemenid",
     title: "چاپارخانه؛ اینترنت هخامنشی",
-    keywords: ["هخامنشی", "چاپار", "کوروش", "داریوش", "تاریخ ایران"],
-    body: `شاهراه شاهی از سارد تا شوش حدود ۲۵۰۰ کیلومتر بود. چاپارها نامه را اسب‌به‌اسب عوض می‌کردند؛ هرودوت نوشت نه برف، نه باران، نه گرما جلویشان را می‌گرفت — جمله‌ای که بعدها شعار پست آمریکا شد.
+    keywords: ["هخامنشی", "چاپار", "کوروش", "داریوش", "تاریخ ایران", "تاریخی", "تاریخ"],
+    body: `شاهراه شاهی از سارد تا شوش حدود ۲۵۰۰ کیلومتر بود. چاپارها نامه را اسب‌به‌اسب عوض می‌کردند؛ هرودوت نوشت نه برف، نه باران، نه گرما جلویشان را نمی‌گرفت — جمله‌ای که بعدها شعار پست آمریکا شد.
 
 این فقط سرعت نبود. امپراتوری بزرگ بدون اطلاعات به‌موقع از هم می‌پاشد. چاپارخانه یعنی حکومت با داده.
 
@@ -51,7 +57,7 @@ export const LESSONS: Lesson[] = [
   {
     id: "caspian",
     title: "دریای خزر؛ دریا یا دریاچه؟",
-    keywords: ["خزر", "کاسپین", "دریا", "جغرافیا", "مازندران"],
+    keywords: ["خزر", "کاسپین", "دریا", "جغرافیا", "مازندران", "جای شگفت"],
     body: `خزر بزرگ‌ترین پهنهٔ آبی محصور دنیاست. به اقیانوس وصل نیست، پس از نظر فنی دریاچه است؛ از نظر اندازه و شوری و سیاست، دریا.
 
 پنج کشور دورش‌اند. سطح آب‌ش در سال‌های اخیر پایین آمده؛ بخشی به‌خاطر اقلیم، بخشی مدیریت رودها — به‌خصوص ولگا.
@@ -79,12 +85,12 @@ export const LESSONS: Lesson[] = [
   {
     id: "persian",
     title: "فارسی؛ زبانی که قرض می‌گیرد و خودش می‌ماند",
-    keywords: ["فارسی", "زبان", "عربی", "دستور", "واژه"],
+    keywords: ["فارسی", "زبان", "عربی", "دستور", "واژه", "نکته زبانی"],
     body: `فارسی از خانوادهٔ هندواروپایی است، عربی از آفروآسیایی. قرض‌واژه زیاد است، دستور زبان نه.
 
 جمع عربیِ «کتاب → کتب» را بلدی، اما موتور فارسی هنوز «ها» و «ان» را ترجیح می‌دهد. فعل فارسی زمان و وجه را با شناسه و فعل کمکی می‌سازد، نه با وزن‌های عربی.
 
-یک نکتهٔ enticing: فارسی ضمیر جنسی ندارد. «او» زن و مرد ندارد. این کمبود نیست؛ انتخاب دستور است.
+یک نکته: فارسی ضمیر جنسی ندارد. «او» زن و مرد ندارد. این کمبود نیست؛ انتخاب دستور است.
 
 کلمهٔ «پیام» را با «message» مقایسه کن: هر دو از ریشهٔ رفتنِ خبر می‌آیند، مسیرشان جدا بوده.
 
@@ -93,7 +99,7 @@ export const LESSONS: Lesson[] = [
   {
     id: "sleep",
     title: "خواب؛ مغز دارد فایل‌ها را مرتب می‌کند",
-    keywords: ["خواب", "مغز", "سلامت", "حافظه", "بیداری"],
+    keywords: ["خواب", "مغز", "سلامت", "حافظه", "بیداری", "بدن"],
     body: `خواب خاموشی نیست. در خواب عمیق، مغز مواد زائد را بهتر می‌شوید؛ در خواب REM، خاطره و هیجان بازپخش می‌شود.
 
 کم‌خوابی فقط خستگی نیست: توجه، ایمنی، و تنظیم قند آسیب می‌بینند. قهوه گیرندهٔ آدنوزین را اشغال می‌کند؛ بدهی خواب را پاک نمی‌کند.
@@ -267,6 +273,103 @@ export const FACTS = [
   "در ریزگرانش، شعله گرد می‌شود نه اشکی؛ اکسیژن از همه طرف می‌رسد.",
 ];
 
+const LANG_OPENERS: Record<string, string> = {
+  fa: `سلام. من پویام. امروز می‌خواهی چه چیزی را بفهمی — یک مفهوم، یک زبان، یا مرور روز؟
+
+اگر دوست داری با صدا حرف بزن، دکمهٔ میکروفون را بزن.`,
+  en: `Hello — I'm Pouya.
+Let's practice English.
+
+Repeat after me: "I want to learn something new today."
+معنی: می‌خواهم امروز چیز تازه‌ای یاد بگیرم.
+
+What do you want to practice: greetings, travel, or work?`,
+  ar: `مرحباً. أنا پویا.
+هيا نتدرّب العربية بلطف.
+
+قل: «أريد أن أتعلم اليوم.»
+معنی: می‌خواهم امروز یاد بگیرم.
+
+ماذا تريد: تحية، سفر، أم عمل؟`,
+  fr: `Salut — je suis Pouya.
+On pratique le français.
+
+Répète : « Je veux apprendre aujourd'hui. »
+معنی: می‌خواهم امروز یاد بگیرم.
+
+Tu veux : salutations, voyage, ou travail ?`,
+  de: `Hallo — ich bin Pouya.
+Lass uns Deutsch üben.
+
+Sag: „Ich möchte heute etwas lernen.“
+معنی: می‌خواهم امروز چیزی یاد بگیرم.
+
+Begrüßung, Reisen oder Arbeit?`,
+  es: `Hola — soy Pouya.
+Practiquemos español.
+
+Di: «Quiero aprender hoy.»
+معنی: می‌خواهم امروز یاد بگیرم.
+
+¿Saludos, viaje o trabajo?`,
+  tr: `Merhaba — ben Pouya.
+Türkçe pratik yapalım.
+
+Söyle: "Bugün bir şey öğrenmek istiyorum."
+معنی: می‌خواهم امروز چیزی یاد بگیرم.
+
+Selamlaşma, seyahat, yoksa iş?`,
+  it: `Ciao — sono Pouya.
+Alleniamo l'italiano.
+
+Di': «Voglio imparare oggi.»
+معنی: می‌خواهم امروز یاد بگیرم.
+
+Saluti, viaggio o lavoro?`,
+  pt: `Olá — eu sou Pouya.
+Vamos praticar português.
+
+Diga: «Quero aprender hoje.»
+معنی: می‌خواهم امروز یاد بگیرم.
+
+Saudações, viagem ou trabalho?`,
+  ru: `Привет — я Пуя.
+Давай попрактикуем русский.
+
+Скажи: «Я хочу учиться сегодня.»
+معنی: می‌خواهم امروز یاد بگیرم.
+
+Приветствие, путешествие или работа?`,
+  zh: `你好，我是 Pouya。
+我们练习中文。
+
+请说：「我今天想学习。」
+معنی: می‌خواهم امروز یاد بگیرم.
+
+问候、旅行，还是工作？`,
+  ja: `こんにちは。Pouya です。
+日本語を練習しましょう。
+
+言ってみて：「今日、学びたいです。」
+معنی: می‌خواهم امروز یاد بگیرم.
+
+挨拶、旅行、仕事、どれにする？`,
+  ko: `안녕, 나는 Pouya야.
+한국어를 연습하자.
+
+따라 해: «오늘 배우고 싶어요.»
+معنی: می‌خواهم امروز یاد بگیرم.
+
+인사, 여행, 아니면 일?`,
+  hi: `नमस्ते — मैं पویا हूँ.
+चलो हिंदी अभ्यास करें.
+
+बोलो: «मैं आज सीखना चाहता हूँ।»
+معنی: می‌خواهم امروز یاد بگیرم.
+
+अभिवादन, यात्रा, या काम?`,
+};
+
 export function matchLesson(text: string): Lesson | null {
   const t = text.toLowerCase();
   let best: Lesson | null = null;
@@ -299,22 +402,86 @@ export function lessonByTopicLabel(label: string): Lesson | null {
 
 export function todayFact() {
   const i = Math.floor(Date.now() / 86_400_000) % FACTS.length;
-  return `دانستی امروز\n\n${FACTS[i]}\n\nاگر خواستی، بگو عمیق‌تر بازش کنم.`;
+  return `دانستی امروز
+
+${FACTS[i]}
+
+اگر خواستی، بگو عمیق‌تر بازش کنم.`;
 }
 
 export function localQuiz(topic: string): QuizPayload {
   if (LOCAL_QUIZZES[topic]) return LOCAL_QUIZZES[topic];
-  if (topic.includes("علوم")) return LOCAL_QUIZZES["علوم"];
-  if (topic.includes("تاریخ")) return LOCAL_QUIZZES["تاریخ ایران"];
+  if (topic.includes("علوم") || topic.toLowerCase().includes("science")) return LOCAL_QUIZZES["علوم"];
+  if (topic.includes("تاریخ") || topic.toLowerCase().includes("history")) return LOCAL_QUIZZES["تاریخ ایران"];
   return LOCAL_QUIZZES["اطلاعات عمومی"];
 }
 
-export function friendlyAiError(error: string) {
-  if (error === "quota" || error.includes("403")) {
-    return "هوش زنده الان سهمیه‌اش تمام است. از درس‌های آماده استفاده می‌کنم.";
+function localDaily(messages: { role: string; content: string }[]) {
+  const userTurns = messages.filter((m) => m.role === "user");
+  if (userTurns.length <= 1) {
+    return `بزن بریم مرور روزانه. کوتاه جواب بده؛ بعد با هم یادداشت می‌سازیم.
+
+1) امروز روی چه کارهایی وقت گذاشتی؟
+2) چه چیزی تمام شد یا جلو رفت؟
+3) چیزی یاد گرفتی، تصمیمی گرفتی، یا ایده‌ای داشتی؟
+4) فردا باید روی چه چیزی تمرکز کنی؟
+
+هر چهار تا را در یک پیام بنویس، یا یکی‌یکی.`;
   }
-  if (error === "AI is not available" || error === "unavailable") {
-    return "هوش زنده در دسترس نیست. دفتر پویا را باز می‌کنم.";
+  const answers = userTurns
+    .slice(1)
+    .map((m) => m.content.trim())
+    .filter(Boolean)
+    .join("\n\n");
+  return `از حرف‌هایت یک پیش‌نویس ساختم. اگر درست است، از دکمهٔ ذخیره بفرستش توی مغز دوم.
+
+## کارهای امروز
+${answers || "—"}
+
+## پیگیری‌ها
+- [ ] تمرکز بعدی را فردا اول صبح شروع کن
+
+اگر بخشی کم است بگو تا کاملش کنیم.`;
+}
+
+function localLanguage(lang: string, last: string, turns: number) {
+  const opener = LANG_OPENERS[lang] ?? LANG_OPENERS.en;
+  if (turns <= 1) return opener;
+  if (lang === "fa") {
+    return `خوب گفتی. یک قدم جلوتر:
+
+جمله را کامل کن: «امروز می‌خواهم …… یاد بگیرم.»
+
+بعد بگو چرا این موضوع برایت مهم است. من تصحیح می‌کنم و یک تمرین کوتاه می‌دهم.`;
   }
-  return "ارتباط با هوش زنده برقرار نشد.";
+  return `${opener}
+
+You said: «${last.slice(0, 180)}»
+
+Keep going in the same language. One or two sentences is enough.
+اگر غلط مهمی بود، همین‌جا نرم تصحیح می‌کنم — بگو ادامه بدهیم.`;
+}
+
+export function localTutorReply(opts: {
+  messages: { role: "user" | "assistant"; content: string }[];
+  mode: "chat" | "daily" | "lesson" | "live" | "language";
+  lang?: string;
+}): string {
+  const last = opts.messages[opts.messages.length - 1]?.content ?? "";
+  if (opts.mode === "daily") return localDaily(opts.messages);
+  if (opts.mode === "live" || opts.mode === "language") {
+    return localLanguage(opts.lang || "fa", last, opts.messages.length);
+  }
+  if (last.includes("دانستی") || last.includes("غافلگیر")) return todayFact();
+  const lesson = matchLesson(last);
+  if (lesson) return `${lesson.title}\n\n${lesson.body}`;
+  if (opts.mode === "lesson") {
+    const pick = LESSONS[Math.floor(Date.now() / 86_400_000) % LESSONS.length];
+    return `${pick.title}\n\n${pick.body}`;
+  }
+  return `من پویام. می‌توانم درس کوتاه بدهم، آزمون بگیرم، زبان تمرین کنیم، یا مرور روزانه را شروع کنیم.
+
+از موضوع‌های بالا یکی را بزن، یا همین‌جا بپرس — مثلاً «گرانش چیست؟» یا «خزر دریا است یا دریاچه؟»
+
+اگر میکروفون را بزنی، با صدا حرف می‌زنیم.`;
 }
