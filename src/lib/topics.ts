@@ -84,26 +84,29 @@ export type LangCode =
   | "zh"
   | "ja"
   | "ko"
-  | "pt";
+  | "pt"
+  | "hi";
 
 export const LANGUAGES: {
   code: LangCode;
   label: string;
   native: string;
   flag: string;
+  locale: string;
 }[] = [
-  { code: "en", label: "انگلیسی", native: "English", flag: "🇬🇧" },
-  { code: "fr", label: "فرانسوی", native: "Français", flag: "🇫🇷" },
-  { code: "de", label: "آلمانی", native: "Deutsch", flag: "🇩🇪" },
-  { code: "es", label: "اسپانیایی", native: "Español", flag: "🇪🇸" },
-  { code: "it", label: "ایتالیایی", native: "Italiano", flag: "🇮🇹" },
-  { code: "tr", label: "ترکی", native: "Türkçe", flag: "🇹🇷" },
-  { code: "ar", label: "عربی", native: "العربية", flag: "🇸🇦" },
-  { code: "ru", label: "روسی", native: "Русский", flag: "🇷🇺" },
-  { code: "zh", label: "چینی", native: "中文", flag: "🇨🇳" },
-  { code: "ja", label: "ژاپنی", native: "日本語", flag: "🇯🇵" },
-  { code: "ko", label: "کره‌ای", native: "한국어", flag: "🇰🇷" },
-  { code: "pt", label: "پرتغالی", native: "Português", flag: "🇵🇹" },
+  { code: "en", label: "انگلیسی", native: "English", flag: "🇬🇧", locale: "en-US" },
+  { code: "fr", label: "فرانسوی", native: "Français", flag: "🇫🇷", locale: "fr-FR" },
+  { code: "de", label: "آلمانی", native: "Deutsch", flag: "🇩🇪", locale: "de-DE" },
+  { code: "es", label: "اسپانیایی", native: "Español", flag: "🇪🇸", locale: "es-ES" },
+  { code: "it", label: "ایتالیایی", native: "Italiano", flag: "🇮🇹", locale: "it-IT" },
+  { code: "tr", label: "ترکی", native: "Türkçe", flag: "🇹🇷", locale: "tr-TR" },
+  { code: "ar", label: "عربی", native: "العربية", flag: "🇸🇦", locale: "ar-SA" },
+  { code: "ru", label: "روسی", native: "Русский", flag: "🇷🇺", locale: "ru-RU" },
+  { code: "zh", label: "چینی", native: "中文", flag: "🇨🇳", locale: "zh-CN" },
+  { code: "ja", label: "ژاپنی", native: "日本語", flag: "🇯🇵", locale: "ja-JP" },
+  { code: "ko", label: "کره‌ای", native: "한국어", flag: "🇰🇷", locale: "ko-KR" },
+  { code: "pt", label: "پرتغالی", native: "Português", flag: "🇵🇹", locale: "pt-BR" },
+  { code: "hi", label: "هندی", native: "हिन्दी", flag: "🇮🇳", locale: "hi-IN" },
 ];
 
 export type Scenario = {
@@ -182,4 +185,10 @@ export const LANGS: Lang[] = [
 
 export function langById(id: string) {
   return LANGS.find((l) => l.id === id) ?? LANGS[0];
+}
+
+export function localeForLangCode(code: LangCode | string) {
+  const fromTeach = LANGUAGES.find((l) => l.code === code);
+  if (fromTeach) return fromTeach.locale;
+  return langById(code).locale;
 }

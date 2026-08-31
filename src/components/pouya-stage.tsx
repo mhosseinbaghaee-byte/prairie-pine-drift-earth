@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
-export type StageMood = "intro" | "idle" | "think" | "talk";
+export type StageMood = "intro" | "idle" | "think" | "talk" | "listen";
 
 export function PouyaStage({
   mood,
@@ -29,11 +29,24 @@ export function PouyaStage({
     play();
   }, [src, loop, mood]);
 
+  const moodLabel =
+    mood === "intro"
+      ? "ورود"
+      : mood === "think"
+        ? "در حال فکر"
+        : mood === "talk"
+          ? "در حال گفتن"
+          : mood === "listen"
+            ? "دارم گوش می‌دهم"
+            : "آماده";
+
   return (
     <section
       className={cn(
         "relative overflow-hidden bg-stage",
-        compact ? "h-[28vh] min-h-44 max-h-64 lg:h-full lg:max-h-none lg:min-h-0" : "h-[38vh] min-h-52 max-h-80 lg:h-full lg:max-h-none",
+        compact
+          ? "h-[28vh] min-h-44 max-h-64 lg:h-full lg:max-h-none lg:min-h-0"
+          : "h-[38vh] min-h-52 max-h-80 lg:h-full lg:max-h-none",
       )}
       aria-label="استودیوی پویا"
     >
@@ -42,7 +55,7 @@ export function PouyaStage({
         className={cn(
           "absolute inset-0 size-full object-cover object-[center_18%] transition-transform duration-slow ease-out",
           mood === "think" && "scale-[1.04]",
-          mood === "talk" && "scale-[1.02]",
+          (mood === "talk" || mood === "listen") && "scale-[1.02]",
         )}
         poster="/pouya/idle.jpg"
         src={src}
@@ -63,7 +76,7 @@ export function PouyaStage({
           {caption}
         </p>
         <span className="hidden rounded-full border border-cream/20 bg-ink/25 px-3 py-1 text-xs text-cream/80 backdrop-blur-sm sm:inline">
-          {mood === "intro" ? "ورود" : mood === "think" ? "در حال فکر" : mood === "talk" ? "در حال گفتن" : "آماده"}
+          {moodLabel}
         </span>
       </div>
     </section>
