@@ -33,9 +33,11 @@ export type ChatMode = "chat" | "daily" | "lesson" | "live" | "language";
 export type { QuizQuestion, QuizPayload };
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
-type ChatResult = { ok: true; text: string } | { ok: false; error: string };
+type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
+type ProviderId = "xai" | "anthropic" | "openai" | "gemini";
 
 const XAI_MODELS = ["grok-4.5", "grok-4-fast", "grok-3"];
+const DEFAULT_ORDER: ProviderId[] = ["xai", "anthropic", "openai", "gemini"];
 
 function levelLine(level: Level) {
   if (level === "kid") return "سطح: خیلی ساده، تصویری، جمله‌های کوتاه. مثل توضیح برای یک کودک کنجکاو.";
@@ -115,7 +117,7 @@ function systemPrompt(level: Level, mode: ChatMode, langId?: string) {
 async function readError(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as {
-      error?: { message?: string } | string;
+      error?: { message?: string; type?: string } | string;
       message?: string;
       code?: string;
     };
@@ -129,7 +131,26 @@ async function readError(res: Response): Promise<string> {
   return `HTTP ${res.status}`;
 }
 
-async function callXai(messages: { role: "system" | "user" | "assistant"; content: string }[], maxTokens: number): Promise<ChatResult | null> {
+function isQuotaStatus(status: number) {
+  return status === 401 || status === 402 || status === 403 || status === 429;
+}
+
+function providerOrder(): ProviderId[] {
+  const raw = (process.env.AI_PROVIDER_ORDER || "").trim().toLowerCase();
+  if (!raw) return DEFAULT_ORDER;
+  const allowed = new Set<ProviderId>(DEFAULT_ORDER);
+  const parsed = raw
+    .split(/[,|\s]+/)
+    .map((s) => s.trim())
+    .filter((s): s is ProviderId => allowed.has(s as ProviderId));
+  const rest = DEFAULT_ORDER.filter((p) => !parsed.includes(p));
+  return parsed.length ? [...parsed, ...rest] : DEFAULT_ORDER;
+}
+
+async function callXai(
+  messages: { role: "system" | "user" | "assistant"; content: string }[],
+  maxTokens: number,
+): Promise<ChatResult | null> {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) return null;
 
@@ -149,20 +170,95 @@ async function callXai(messages: { role: "system" | "user" | "assistant"; conten
           temperature: 0.7,
         }),
       });
-      if (res.status === 403) return { ok: false, error: "quota" };
+      if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
       if (!res.ok) {
         last = await readError(res);
         continue;
       }
       const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const text = body.choices?.[0]?.message?.content?.trim() ?? "";
-      if (text) return { ok: true, text };
+      if (text) return { ok: true, text, provider: "xai" };
       last = "empty";
     } catch {
       last = "network";
     }
   }
   return { ok: false, error: last };
+}
+
+async function callAnthropic(
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+): Promise<ChatResult | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        system,
+        messages: history.map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        })),
+      }),
+    });
+    if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
+    if (!res.ok) return { ok: false, error: await readError(res) };
+    const body = (await res.json()) as {
+      content?: Array<{ type?: string; text?: string }>;
+    };
+    const text = (body.content ?? [])
+      .filter((p) => p.type === "text" || typeof p.text === "string")
+      .map((p) => p.text ?? "")
+      .join("")
+      .trim();
+    return text ? { ok: true, text, provider: "anthropic" } : { ok: false, error: "empty" };
+  } catch {
+    return { ok: false, error: "network" };
+  }
+}
+
+async function callOpenAI(
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+): Promise<ChatResult | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+    const res = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "system", content: system }, ...history],
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      }),
+    });
+    if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
+    if (!res.ok) return { ok: false, error: await readError(res) };
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+    return text ? { ok: true, text, provider: "openai" } : { ok: false, error: "empty" };
+  } catch {
+    return { ok: false, error: "network" };
+  }
 }
 
 async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
@@ -185,28 +281,55 @@ async function callGemini(system: string, history: ChatMsg[], maxTokens: number)
         }),
       },
     );
+    if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
     if (!res.ok) return { ok: false, error: await readError(res) };
     const body = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
     const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
-    return text ? { ok: true, text } : { ok: false, error: "empty" };
+    return text ? { ok: true, text, provider: "gemini" } : { ok: false, error: "empty" };
   } catch {
     return { ok: false, error: "network" };
   }
 }
 
+async function runProvider(
+  id: ProviderId,
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+): Promise<ChatResult | null> {
+  if (id === "xai") {
+    return callXai([{ role: "system", content: system }, ...history], maxTokens);
+  }
+  if (id === "anthropic") return callAnthropic(system, history, maxTokens);
+  if (id === "openai") return callOpenAI(system, history, maxTokens);
+  if (id === "gemini") return callGemini(system, history, maxTokens);
+  return null;
+}
+
+/**
+ * Try providers in order. Skip missing keys. On quota/rate-limit/error, try the next.
+ * Last resort: local offline tutor so chat never hard-fails.
+ */
 async function chatComplete(
   system: string,
   history: ChatMsg[],
   maxTokens: number,
   fallback: () => string,
-): Promise<{ ok: true; text: string }> {
-  const xai = await callXai([{ role: "system", content: system }, ...history], maxTokens);
-  if (xai?.ok) return xai;
-  const gemini = await callGemini(system, history, maxTokens);
-  if (gemini?.ok) return gemini;
-  return { ok: true, text: fallback() };
+): Promise<{ ok: true; text: string; provider?: string }> {
+  const order = providerOrder();
+  for (const id of order) {
+    try {
+      const result = await runProvider(id, system, history, maxTokens);
+      if (!result) continue; // no key configured
+      if (result.ok && result.text) return { ok: true, text: result.text, provider: result.provider || id };
+      // quota / empty / error → try next
+    } catch {
+      /* try next */
+    }
+  }
+  return { ok: true, text: fallback(), provider: "local" };
 }
 
 export const askPouya = createServerFn({ method: "POST" })
@@ -225,6 +348,7 @@ export const askPouya = createServerFn({ method: "POST" })
       return {
         ok: true as const,
         text: localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
+        provider: "local",
       };
     }
   });
@@ -292,7 +416,7 @@ export const dailyFact = createServerFn({ method: "POST" })
         () => todayFact(),
       );
     } catch {
-      return { ok: true as const, text: todayFact() };
+      return { ok: true as const, text: todayFact(), provider: "local" };
     }
   });
 
@@ -319,27 +443,53 @@ export const speakPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => SpeakInput.parse(input))
   .handler(async ({ data }) => {
     try {
-      const apiKey = process.env.XAI_API_KEY;
-      if (!apiKey) return { ok: false as const, error: "unavailable" };
-
       const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 420);
-      const res = await fetch("https://api.x.ai/v1/tts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          text,
-          voice_id: "zagan",
-          language: ttsLanguage(data.lang),
-          output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 },
-          speed: 1.0,
-        }),
-      });
-      if (!res.ok) return { ok: false as const, error: "unavailable" };
-      const buf = Buffer.from(await res.arrayBuffer());
-      return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+
+      // Prefer xAI TTS, then OpenAI TTS
+      const xaiKey = process.env.XAI_API_KEY;
+      if (xaiKey) {
+        const res = await fetch("https://api.x.ai/v1/tts", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${xaiKey}`,
+          },
+          body: JSON.stringify({
+            text,
+            voice_id: "zagan",
+            language: ttsLanguage(data.lang),
+            output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 },
+            speed: 1.0,
+          }),
+        });
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+        }
+      }
+
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (openaiKey) {
+        const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+        const res = await fetch(`${base}/audio/speech`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts",
+            voice: process.env.OPENAI_TTS_VOICE || "alloy",
+            input: text,
+          }),
+        });
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+        }
+      }
+
+      return { ok: false as const, error: "unavailable" };
     } catch {
       return { ok: false as const, error: "unavailable" };
     }
