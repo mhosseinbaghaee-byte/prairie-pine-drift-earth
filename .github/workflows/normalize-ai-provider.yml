@@ -1,0 +1,49 @@
+name: Normalize AI provider order
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: ${{ !contains(github.event.head_commit.message, 'ci: normalize AI provider order') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Force Gemini-only production path
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('src/lib/ai.ts')
+          s = p.read_text()
+          s = re.sub(
+              r'const DEFAULT_ORDER: ProviderId\[\] = \[[^\n]+\];[^\n]*',
+              'const DEFAULT_ORDER: ProviderId[] = ["gemini"]; // production-safe: do not call paid xAI/OpenAI/Anthropic paths unless explicitly re-enabled',
+              s,
+              count=1,
+          )
+          s = re.sub(
+              r'function providerOrder\(\): ProviderId\[\] \{.*?\n\}',
+              'function providerOrder(): ProviderId[] {\n  // Deliberately ignore AI_PROVIDER_ORDER in production. This prevents an old Vercel\n  // environment variable from silently routing requests to xAI and producing 400s.\n  return DEFAULT_ORDER;\n}',
+              s,
+              count=1,
+              flags=re.S,
+          )
+          p.write_text(s)
+          PY
+
+      - name: Commit normalization
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/lib/ai.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "ci: normalize AI provider order"
+          git push
