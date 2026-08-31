@@ -1,0 +1,17 @@
+services:
+  omniroute:
+    image: diegosouzapw/omniroute:latest
+    container_name: pouya-omniroute
+    restart: unless-stopped
+    stop_timeout: 40s
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:20128:20128"
+    volumes:
+      - omniroute-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  omniroute-data:
