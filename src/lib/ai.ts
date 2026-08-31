@@ -37,7 +37,7 @@ type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; e
 type ProviderId = "xai" | "anthropic" | "openai" | "gemini";
 
 const XAI_MODELS = ["grok-4.5", "grok-4-fast", "grok-3"];
-const DEFAULT_ORDER: ProviderId[] = ["xai", "anthropic", "openai", "gemini"];
+const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai", "anthropic", "xai"];
 
 function levelLine(level: Level) {
   if (level === "kid") return "سطح: خیلی ساده، تصویری، جمله‌های کوتاه. مثل توضیح برای یک کودک کنجکاو.";
@@ -265,7 +265,7 @@ async function callGemini(system: string, history: ChatMsg[], maxTokens: number)
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return null;
   try {
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
