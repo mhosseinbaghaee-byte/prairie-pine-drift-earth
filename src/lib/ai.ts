@@ -37,7 +37,7 @@ type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; e
 type ProviderId = "xai" | "anthropic" | "openai" | "gemini";
 
 const XAI_MODELS = ["grok-4.5", "grok-4-fast", "grok-3"];
-const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai", "anthropic", "xai"];
+const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai", "anthropic", "xai"]; // gemini first — xAI needs credits
 
 function levelLine(level: Level) {
   if (level === "kid") return "سطح: خیلی ساده، تصویری، جمله‌های کوتاه. مثل توضیح برای یک کودک کنجکاو.";
@@ -264,33 +264,53 @@ async function callOpenAI(
 async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return null;
-  try {
-    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: history.map((m) => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }],
-          })),
-          generationConfig: { maxOutputTokens: maxTokens },
-        }),
-      },
-    );
-    if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
-    if (!res.ok) return { ok: false, error: await readError(res) };
-    const body = (await res.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
-    return text ? { ok: true, text, provider: "gemini" } : { ok: false, error: "empty" };
-  } catch {
-    return { ok: false, error: "network" };
+
+  const models = [
+    process.env.GEMINI_MODEL,
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash-latest",
+  ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
+
+  let last = "gemini unavailable";
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: history.map((m) => ({
+              role: m.role === "assistant" ? "model" : "user",
+              parts: [{ text: m.content }],
+            })),
+            generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
+          }),
+        },
+      );
+      if (isQuotaStatus(res.status)) {
+        last = `quota:${res.status}`;
+        // try next model; key-level quota will fail all
+        continue;
+      }
+      if (!res.ok) {
+        last = await readError(res);
+        continue;
+      }
+      const body = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
+      if (text) return { ok: true, text, provider: "gemini" };
+      last = "empty";
+    } catch {
+      last = "network";
+    }
   }
+  return { ok: false, error: last };
 }
 
 async function runProvider(
