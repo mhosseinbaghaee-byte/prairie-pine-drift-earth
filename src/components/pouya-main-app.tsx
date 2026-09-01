@@ -357,7 +357,7 @@ export function PouyaMainApp() {
             <p className="font-display text-base font-medium tracking-tight">پویا</p>
             <p className="text-xs text-fg-muted">مربی زنده دانش و زبان</p>
           </div>
-          <nav className="flex rounded-lg bg-surface p-1" aria-label="بخش‌ها">
+          <nav className="pouya-glass-nav" aria-label="بخش‌ها">
             {(
               [
                 ["chat", "گفتگو", MessageCircle],
@@ -377,11 +377,12 @@ export function PouyaMainApp() {
                   else if (id === "chat") setMode("chat");
                 }}
                 className={cn(
-                  "flex h-10 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors duration-quick",
-                  tab === id ? "bg-cream text-ink" : "text-fg-muted hover:text-fg",
+                  "pouya-glass-tab",
+                  tab === id && "pouya-glass-tab-active",
                 )}
+                aria-current={tab === id ? "page" : undefined}
               >
-                <Icon className="size-4" strokeWidth={1.75} />
+                <Icon className="size-4 shrink-0" strokeWidth={tab === id ? 2 : 1.75} />
                 <span className="hidden sm:inline">{label}</span>
               </button>
             ))}
