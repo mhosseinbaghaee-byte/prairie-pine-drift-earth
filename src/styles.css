@@ -121,3 +121,59 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+/* iOS-style liquid glass tabs */
+.pouya-glass-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.28rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-card) 55%, transparent);
+  border: 1px solid color-mix(in srgb, #ffffff 55%, var(--color-border));
+  box-shadow:
+    0 1px 0 color-mix(in srgb, #ffffff 65%, transparent) inset,
+    0 8px 24px color-mix(in srgb, var(--color-ink) 8%, transparent);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+}
+
+.pouya-glass-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2.35rem;
+  padding: 0 0.7rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  color: var(--color-fg-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  transition:
+    color var(--duration-quick) ease,
+    background-color var(--duration-quick) ease,
+    border-color var(--duration-quick) ease,
+    box-shadow var(--duration-quick) ease,
+    transform var(--duration-quick) ease;
+}
+
+.pouya-glass-tab:hover {
+  color: var(--color-fg);
+  background: color-mix(in srgb, #ffffff 28%, transparent);
+}
+
+.pouya-glass-tab-active {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-cream) 78%, transparent);
+  border-color: color-mix(in srgb, var(--color-stage) 72%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-stage) 55%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--color-stage) 14%, transparent),
+    0 1px 0 color-mix(in srgb, #ffffff 70%, transparent) inset,
+    0 4px 14px color-mix(in srgb, var(--color-stage) 18%, transparent);
+}
+
+.pouya-glass-tab-active:hover {
+  color: var(--color-ink);
+  background: color-mix(in srgb, var(--color-cream) 88%, transparent);
+}
