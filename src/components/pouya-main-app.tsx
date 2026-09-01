@@ -133,12 +133,7 @@ export function PouyaMainApp() {
 
   const langLabel = LANGUAGES.find((l) => l.code === lang)?.label ?? "انگلیسی";
   const immersiveChat = (tab === "chat" || tab === "live") && introDone;
-  const effectiveMood: StageMood =
-    !introDone
-      ? "intro"
-      : typingFocus && !busy && !listening
-        ? "lookdown"
-        : mood;
+  const effectiveMood: StageMood = !introDone ? "intro" : "idle";
 
   const caption =
     mood === "intro"
@@ -196,24 +191,6 @@ export function PouyaMainApp() {
     window.speechSynthesis.speak(utter);
   }
 
-  function typeOut(text: string) {
-    setTyped("");
-    let i = 0;
-    const step = Math.max(1, Math.ceil(text.length / 180));
-    return new Promise<void>((resolve) => {
-      const tick = () => {
-        i = Math.min(text.length, i + step);
-        setTyped(text.slice(0, i));
-        if (i >= text.length) {
-          resolve();
-          return;
-        }
-        window.setTimeout(tick, 16);
-      };
-      tick();
-    });
-  }
-
   async function send(text: string, nextMode: ChatMode = mode, nextLang?: LangCode) {
     const content = text.trim();
     if (!content || busy) return;
@@ -245,7 +222,6 @@ export function PouyaMainApp() {
           : localTutorReply({ messages: history.slice(-12), mode: nextMode, lang: useLang });
       setMood("talk");
       void playVoice(reply);
-      await typeOut(reply);
       setMessages([...history, { role: "assistant", content: reply }]);
       setTyped("");
       if (!voiceActiveRef.current) setMood("idle");
@@ -253,7 +229,6 @@ export function PouyaMainApp() {
       const reply = localTutorReply({ messages: history.slice(-12), mode: nextMode, lang: useLang });
       setMood("talk");
       void playVoice(reply);
-      await typeOut(reply);
       setMessages([...history, { role: "assistant", content: reply }]);
       setTyped("");
       if (!voiceActiveRef.current) setMood("idle");
@@ -367,9 +342,9 @@ export function PouyaMainApp() {
           }}
           aria-label="ورود به پویا"
         >
-          <div className="relative aspect-video w-full max-h-dvh max-w-[100vw] overflow-hidden bg-stage">
+          <div className="relative aspect-[9/16] h-[min(100dvh,100svh)] w-auto max-w-[100vw] overflow-hidden bg-stage sm:h-auto sm:max-h-[min(100dvh,920px)] sm:w-full sm:max-w-[min(100vw,calc(100dvh*9/16))]">
             <PouyaStage mood="intro" caption="سلام، من پویام." immersive showCaption />
-            <p className="pointer-events-none absolute inset-x-0 bottom-8 text-center text-sm text-cream/80">
+            <p className="pointer-events-none absolute inset-x-0 bottom-[12%] text-center text-sm text-cream/85 drop-shadow">
               برای ادامه لمس کن
             </p>
           </div>

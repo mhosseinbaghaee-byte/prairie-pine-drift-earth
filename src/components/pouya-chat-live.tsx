@@ -51,7 +51,7 @@ export function ChatPane({
         <div className="flex rounded-full border border-white/25 bg-white/15 p-0.5 backdrop-blur-md">
           {LEVELS.map((l) => (
             <button key={l.id} type="button" title={l.hint} onClick={() => setLevel(l.id)}
-              className={cn("h-8 rounded-full px-2.5 text-xs transition-colors", level === l.id ? "bg-white text-ink" : "text-cream/85 hover:text-cream")}>
+              className={cn("h-8 rounded-full px-2.5 text-xs", level === l.id ? "bg-white text-ink" : "text-cream/85 hover:text-cream")}>
               {l.label}
             </button>
           ))}
@@ -76,7 +76,7 @@ export function ChatPane({
             <div className="flex flex-wrap justify-center gap-2">
               {TOPICS.map((t) => (
                 <button key={t.id} type="button" onClick={() => onLesson(t.prompt)}
-                  className="h-10 rounded-full border border-white/30 bg-white/15 px-3.5 text-sm text-cream backdrop-blur-md transition hover:bg-white/25">
+                  className="h-10 rounded-full border border-white/30 bg-white/15 px-3.5 text-sm text-cream backdrop-blur-md hover:bg-white/25">
                   {t.label}
                 </button>
               ))}
@@ -104,7 +104,7 @@ export function ChatPane({
             {typed ? <Bubble role="assistant" text={typed} live /> : null}
             {busy && !typed ? (
               <div className="flex items-center gap-2 text-sm text-cream/80">
-                <span className="size-1.5 animate-pulse rounded-full bg-cream" />
+                <span className="size-1.5 rounded-full bg-cream" />
                 پویا دارد فکر می‌کند
               </div>
             ) : null}
