@@ -107,25 +107,38 @@ export function PouyaMainApp() {
     const pref = loadProfile().preferredAssistantId;
     return pref || undefined;
   });
+  const [typingFocus, setTypingFocus] = useState(false);
+  const [introDone, setIntroDone] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return sessionStorage.getItem(INTRO_KEY) === "1";
+  });
 
   useEffect(() => {
-    const seen = sessionStorage.getItem(INTRO_KEY);
-    if (seen) {
-      setMood("idle");
+    if (introDone) {
+      setMood((m) => (m === "intro" ? "idle" : m));
       return;
     }
+    setMood("intro");
     const t = window.setTimeout(() => {
       sessionStorage.setItem(INTRO_KEY, "1");
+      setIntroDone(true);
       setMood("idle");
-    }, 12500);
+    }, 14000);
     return () => window.clearTimeout(t);
-  }, []);
+  }, [introDone]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typed, busy, tab]);
 
   const langLabel = LANGUAGES.find((l) => l.code === lang)?.label ?? "انگلیسی";
+  const immersiveChat = (tab === "chat" || tab === "live") && introDone;
+  const effectiveMood: StageMood =
+    !introDone
+      ? "intro"
+      : typingFocus && !busy && !listening
+        ? "lookdown"
+        : mood;
 
   const caption =
     mood === "intro"
@@ -342,119 +355,173 @@ export function PouyaMainApp() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-fg lg:h-dvh lg:flex-row" dir="ltr">
-      <div className="relative lg:w-[42%] lg:shrink-0">
-        <PouyaStage
-          mood={mood}
-          caption={caption}
-          compact={(tab !== "chat" && tab !== "live") || messages.length > 0}
-        />
-      </div>
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background" dir="rtl">
-        <header className="flex items-center gap-2 border-b border-border px-3 py-2.5 sm:px-5">
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-base font-medium tracking-tight">پویا</p>
-            <p className="text-xs text-fg-muted">مربی زنده دانش و زبان</p>
+    <div className="relative flex min-h-dvh flex-col bg-stage text-fg" dir="ltr">
+      {!introDone ? (
+        <button
+          type="button"
+          className="absolute inset-0 z-40 flex items-center justify-center bg-stage"
+          onClick={() => {
+            sessionStorage.setItem(INTRO_KEY, "1");
+            setIntroDone(true);
+            setMood("idle");
+          }}
+          aria-label="ورود به پویا"
+        >
+          <div className="relative aspect-video w-full max-h-dvh max-w-[100vw] overflow-hidden bg-stage">
+            <PouyaStage mood="intro" caption="سلام، من پویام." immersive showCaption />
+            <p className="pointer-events-none absolute inset-x-0 bottom-8 text-center text-sm text-cream/80">
+              برای ادامه لمس کن
+            </p>
           </div>
-          <nav className="pouya-glass-nav" aria-label="بخش‌ها">
-            {(
-              [
-                ["chat", "گفتگو", MessageCircle],
-                ["coaches", "مربی‌ها", BookOpen],
-                ["live", "زبان", Languages],
-                ["quiz", "آزمون", GraduationCap],
-                ["vault", "مغز دوم", Brain],
-                ["account", "حساب", Bookmark],
-              ] as const
-            ).map(([id, label, Icon]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setTab(id);
-                  if (id === "live") setMode("live");
-                  else if (id === "chat") setMode("chat");
+        </button>
+      ) : null}
+
+      {immersiveChat ? (
+        <PouyaStage mood={effectiveMood} caption={caption} immersive showCaption={false} />
+      ) : null}
+
+      <div
+        className={cn(
+          "relative z-10 flex min-h-0 min-w-0 flex-1 flex-col",
+          immersiveChat ? "bg-transparent" : "bg-background lg:flex-row",
+        )}
+        dir="rtl"
+      >
+        {!immersiveChat ? (
+          <div className="relative lg:w-[42%] lg:shrink-0">
+            <PouyaStage mood={effectiveMood} caption={caption} compact={tab !== "chat" && tab !== "live"} />
+          </div>
+        ) : null}
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header
+            className={cn(
+              "flex items-center gap-2 px-3 py-2.5 sm:px-5",
+              immersiveChat
+                ? "border-b border-white/10 bg-stage/20 backdrop-blur-md"
+                : "border-b border-border bg-background",
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <p className={cn("font-display text-base font-medium tracking-tight", immersiveChat && "text-cream")}>
+                پویا
+              </p>
+              <p className={cn("text-xs", immersiveChat ? "text-cream/70" : "text-fg-muted")}>
+                مربی زنده دانش و زبان
+              </p>
+            </div>
+            <nav className={cn("pouya-glass-nav", immersiveChat && "pouya-glass-nav-on-red")} aria-label="بخش‌ها">
+              {(
+                [
+                  ["chat", "گفتگو", MessageCircle],
+                  ["coaches", "مربی‌ها", BookOpen],
+                  ["live", "زبان", Languages],
+                  ["quiz", "آزمون", GraduationCap],
+                  ["vault", "مغز دوم", Brain],
+                  ["account", "حساب", Bookmark],
+                ] as const
+              ).map(([id, label, Icon]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setTab(id);
+                    if (id === "live") setMode("live");
+                    else if (id === "chat") setMode("chat");
+                  }}
+                  className={cn("pouya-glass-tab", tab === id && "pouya-glass-tab-active")}
+                  aria-current={tab === id ? "page" : undefined}
+                >
+                  <Icon className="size-4 shrink-0" strokeWidth={tab === id ? 2 : 1.75} />
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
+            </nav>
+          </header>
+
+          {tab === "chat" ? (
+            <ChatPane
+              messages={messages}
+              typed={typed}
+              busy={busy}
+              draft={draft}
+              setDraft={setDraft}
+              level={level}
+              setLevel={setLevel}
+              voiceOn={voiceOn}
+              setVoiceOn={setVoiceOn}
+              mode={mode}
+              listening={listening}
+              scrollerRef={scrollerRef}
+              onSend={(t) => void send(t)}
+              onLesson={(t) => void send(t, "lesson")}
+              onDaily={() => void send("مرور روزانه را شروع کن. از من سؤال بپرس.", "daily")}
+              onFact={() => void askFact(level, send)}
+              onMic={() => toggleMic("chat")}
+              onLivePractice={() => {
+                setTab("live");
+                setMode("live");
+              }}
+              onNew={newChat}
+              onSave={() => saveLast()}
+              onTypingFocus={setTypingFocus}
+            />
+          ) : null}
+
+          {tab === "live" ? (
+            <LivePane
+              messages={messages}
+              typed={typed}
+              busy={busy}
+              draft={draft}
+              setDraft={setDraft}
+              level={level}
+              setLevel={setLevel}
+              voiceOn={voiceOn}
+              setVoiceOn={setVoiceOn}
+              lang={lang}
+              setLang={setLang}
+              listening={listening}
+              scrollerRef={scrollerRef}
+              onSend={(t) => void send(t, "live")}
+              onScenario={startScenario}
+              onMic={() => toggleMic("live")}
+              onNew={newChat}
+              onSave={() => saveLast()}
+              onTypingFocus={setTypingFocus}
+            />
+          ) : null}
+
+          {tab === "quiz" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+              <QuizPane level={level} setMood={setMood} />
+            </div>
+          ) : null}
+          {tab === "vault" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+              <VaultPane />
+            </div>
+          ) : null}
+          {tab === "coaches" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+              <CoachesPane
+                activeId={assistantId}
+                onSelect={(a: Assistant) => setAssistantId(a.id)}
+                onStart={(a: Assistant) => {
+                  setAssistantId(a.id);
+                  setTab("chat");
+                  setMode("chat");
+                  void send(a.starter, "lesson");
                 }}
-                className={cn(
-                  "pouya-glass-tab",
-                  tab === id && "pouya-glass-tab-active",
-                )}
-                aria-current={tab === id ? "page" : undefined}
-              >
-                <Icon className="size-4 shrink-0" strokeWidth={tab === id ? 2 : 1.75} />
-                <span className="hidden sm:inline">{label}</span>
-              </button>
-            ))}
-          </nav>
-        </header>
-
-        {tab === "chat" ? (
-          <ChatPane
-            messages={messages}
-            typed={typed}
-            busy={busy}
-            draft={draft}
-            setDraft={setDraft}
-            level={level}
-            setLevel={setLevel}
-            voiceOn={voiceOn}
-            setVoiceOn={setVoiceOn}
-            mode={mode}
-            listening={listening}
-            scrollerRef={scrollerRef}
-            onSend={(t) => void send(t)}
-            onLesson={(t) => void send(t, "lesson")}
-            onDaily={() => void send("مرور روزانه را شروع کن. از من سؤال بپرس.", "daily")}
-            onFact={() => void askFact(level, send)}
-            onMic={() => toggleMic("chat")}
-            onLivePractice={() => {
-              setTab("live");
-              setMode("live");
-            }}
-            onNew={newChat}
-            onSave={() => saveLast()}
-          />
-        ) : null}
-
-        {tab === "live" ? (
-          <LivePane
-            messages={messages}
-            typed={typed}
-            busy={busy}
-            draft={draft}
-            setDraft={setDraft}
-            level={level}
-            setLevel={setLevel}
-            voiceOn={voiceOn}
-            setVoiceOn={setVoiceOn}
-            lang={lang}
-            setLang={setLang}
-            listening={listening}
-            scrollerRef={scrollerRef}
-            onSend={(t) => void send(t, "live")}
-            onScenario={startScenario}
-            onMic={() => toggleMic("live")}
-            onNew={newChat}
-            onSave={() => saveLast()}
-          />
-        ) : null}
-
-        {tab === "quiz" ? <QuizPane level={level} setMood={setMood} /> : null}
-        {tab === "vault" ? <VaultPane /> : null}
-        {tab === "coaches" ? (
-          <CoachesPane
-            activeId={assistantId}
-            onSelect={(a: Assistant) => setAssistantId(a.id)}
-            onStart={(a: Assistant) => {
-              setAssistantId(a.id);
-              setTab("chat");
-              setMode("chat");
-              void send(a.starter, "lesson");
-            }}
-          />
-        ) : null}
-        {tab === "account" ? <AccountPane /> : null}
+              />
+            </div>
+          ) : null}
+          {tab === "account" ? (
+            <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+              <AccountPane />
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
