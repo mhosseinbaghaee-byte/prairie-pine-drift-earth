@@ -2,96 +2,180 @@ import type { Level } from "./topics";
 import type { AssistantId } from "./assistants";
 
 const PROFILE_KEY = "pouya-profile-v1";
-const SESSION_KEY = "pouya-local-session-v1";
+const ACCOUNT_KEY = "pouya-account-v1";
+const SUB_KEY = "pouya-subscription-v1";
+
+export type PlanId = "free" | "plus" | "pro";
+
+export type SubscriptionPlan = {
+  id: PlanId;
+  name: string;
+  priceLabel: string;
+  period: string;
+  credits: number;
+  features: string[];
+  highlighted?: boolean;
+};
+
+export const PLANS: SubscriptionPlan[] = [
+  {
+    id: "free",
+    name: "رایگان",
+    priceLabel: "۰ تومان",
+    period: "همیشه",
+    credits: 30,
+    features: ["چت آموزشی پایه", "کوییز و Vault محلی", "۳ مربی اصلی", "۳۰ پیام ماهانه (تقریبی)"],
+  },
+  {
+    id: "plus",
+    name: "پلاس",
+    priceLabel: "۱۴۹٬۰۰۰ تومان",
+    period: "ماهانه",
+    credits: 400,
+    highlighted: true,
+    features: ["همه مربی‌ها", "۴۰۰ اعتبار پیام", "صدا و گفتگوی زنده بیشتر", "اولویت مدل‌های بهتر", "پشتیبانی در اولویت"],
+  },
+  {
+    id: "pro",
+    name: "حرفه‌ای",
+    priceLabel: "۲۹۹٬۰۰۰ تومان",
+    period: "ماهانه",
+    credits: 1200,
+    features: ["همه امکانات پلاس", "۱۲۰۰ اعتبار پیام", "تحلیل فایل آموزشی (به‌زودی)", "چند پروفایل یادگیرنده", "گزارش پیشرفت ماهانه"],
+  },
+];
 
 export type UserProfile = {
   displayName: string;
-  email: string;
-  /** Learning goal free text */
-  goal: string;
-  defaultLevel: Level;
-  preferredAssistantId: AssistantId;
+  level: Level;
+  goals: string[];
+  preferredAssistantId: AssistantId | "";
   voiceOn: boolean;
-  /** ISO created */
-  createdAt: string;
+  dailyReminder: boolean;
   updatedAt: string;
 };
 
-export type LocalSession = {
+export type LocalAccount = {
+  opened: boolean;
   email: string;
-  displayName: string;
-  signedInAt: string;
+  name: string;
+  phone: string;
+  createdAt: string;
 };
 
-const defaultProfile = (): UserProfile => {
-  const now = new Date().toISOString();
-  return {
-    displayName: "",
-    email: "",
-    goal: "",
-    defaultLevel: "teen",
-    preferredAssistantId: "pouya",
-    voiceOn: true,
-    createdAt: now,
-    updatedAt: now,
-  };
+export type LocalSubscription = {
+  planId: PlanId;
+  creditsRemaining: number;
+  startedAt: string;
+  expiresAt: string | null;
+  pendingPlanId?: PlanId;
 };
+
+const DEFAULT_PROFILE: UserProfile = {
+  displayName: "",
+  level: "teen",
+  goals: [],
+  preferredAssistantId: "",
+  voiceOn: true,
+  dailyReminder: false,
+  updatedAt: new Date(0).toISOString(),
+};
+
+const DEFAULT_ACCOUNT: LocalAccount = {
+  opened: false,
+  email: "",
+  name: "",
+  phone: "",
+  createdAt: "",
+};
+
+function defaultSub(): LocalSubscription {
+  return {
+    planId: "free",
+    creditsRemaining: PLANS[0].credits,
+    startedAt: new Date().toISOString(),
+    expiresAt: null,
+  };
+}
+
+function safeParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return { ...fallback, ...(JSON.parse(raw) as object) } as T;
+  } catch {
+    return fallback;
+  }
+}
 
 export function loadProfile(): UserProfile {
-  if (typeof window === "undefined") return defaultProfile();
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    if (!raw) return defaultProfile();
-    return { ...defaultProfile(), ...JSON.parse(raw) } as UserProfile;
-  } catch {
-    return defaultProfile();
-  }
+  if (typeof window === "undefined") return { ...DEFAULT_PROFILE };
+  return safeParse(localStorage.getItem(PROFILE_KEY), { ...DEFAULT_PROFILE });
 }
 
 export function saveProfile(patch: Partial<UserProfile>): UserProfile {
-  const cur = loadProfile();
   const next: UserProfile = {
-    ...cur,
+    ...loadProfile(),
     ...patch,
     updatedAt: new Date().toISOString(),
-    createdAt: cur.createdAt || new Date().toISOString(),
   };
-  if (typeof window !== "undefined") {
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
-  }
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
   return next;
 }
 
-export function loadLocalSession(): LocalSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as LocalSession;
-  } catch {
-    return null;
-  }
+export function loadAccount(): LocalAccount {
+  if (typeof window === "undefined") return { ...DEFAULT_ACCOUNT };
+  return safeParse(localStorage.getItem(ACCOUNT_KEY), { ...DEFAULT_ACCOUNT });
 }
 
-/** Lightweight local account (until Better Auth + DB is enabled in production). */
-export function signInLocal(email: string, displayName: string): LocalSession {
-  const session: LocalSession = {
-    email: email.trim().toLowerCase(),
-    displayName: displayName.trim() || email.split("@")[0] || "کاربر",
-    signedInAt: new Date().toISOString(),
+export function openAccount(input: { name: string; email: string; phone?: string }): LocalAccount {
+  const next: LocalAccount = {
+    opened: true,
+    name: input.name.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: (input.phone || "").trim(),
+    createdAt: new Date().toISOString(),
   };
-  if (typeof window !== "undefined") {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  }
-  saveProfile({ email: session.email, displayName: session.displayName });
-  return session;
+  localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
+  if (next.name) saveProfile({ displayName: next.name });
+  return next;
 }
 
-export function signOutLocal() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(SESSION_KEY);
+export function loadSubscription(): LocalSubscription {
+  if (typeof window === "undefined") return defaultSub();
+  const s = safeParse(localStorage.getItem(SUB_KEY), defaultSub());
+  if (!PLANS.some((p) => p.id === s.planId)) return defaultSub();
+  return s;
 }
 
-export function isSignedInLocal(): boolean {
-  return Boolean(loadLocalSession());
+export function saveSubscription(patch: Partial<LocalSubscription>): LocalSubscription {
+  const next = { ...loadSubscription(), ...patch };
+  localStorage.setItem(SUB_KEY, JSON.stringify(next));
+  return next;
 }
+
+export function activatePlan(planId: PlanId): LocalSubscription {
+  const plan = PLANS.find((p) => p.id === planId) ?? PLANS[0];
+  const started = new Date();
+  const expires =
+    planId === "free" ? null : new Date(started.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  return saveSubscription({
+    planId: plan.id,
+    creditsRemaining: plan.credits,
+    startedAt: started.toISOString(),
+    expiresAt: expires,
+    pendingPlanId: undefined,
+  });
+}
+
+export function planById(id: PlanId) {
+  return PLANS.find((p) => p.id === id) ?? PLANS[0];
+}
+
+export const GOAL_OPTIONS = [
+  "زبان خارجی",
+  "علوم و کنکور",
+  "مهارت مطالعه",
+  "اطلاعات عمومی",
+  "ریاضی",
+  "تاریخ و فرهنگ",
+] as const;
