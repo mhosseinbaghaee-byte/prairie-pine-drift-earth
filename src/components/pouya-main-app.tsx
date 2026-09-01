@@ -72,8 +72,6 @@ function getSpeechRecognition(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
-const INTRO_KEY = "pouya-intro-seen";
-
 function spokenSlice(text: string) {
   const clean = text
     .replace(/[#>*`]/g, "")
@@ -90,7 +88,7 @@ export function PouyaMainApp() {
   const [tab, setTab] = useState<Tab>("chat");
   const [level, setLevel] = useState<Level>("teen");
   const [voiceOn, setVoiceOn] = useState(true);
-  const [mood, setMood] = useState<StageMood>("intro");
+  const [mood, setMood] = useState<StageMood>("idle");
   const [mode, setMode] = useState<ChatMode>("chat");
   const [lang, setLang] = useState<LangCode>("en");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -108,37 +106,17 @@ export function PouyaMainApp() {
     return pref || undefined;
   });
   const [typingFocus, setTypingFocus] = useState(false);
-  const [introDone, setIntroDone] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem(INTRO_KEY) === "1";
-  });
-
-  useEffect(() => {
-    if (introDone) {
-      setMood((m) => (m === "intro" ? "idle" : m));
-      return;
-    }
-    setMood("intro");
-    const t = window.setTimeout(() => {
-      sessionStorage.setItem(INTRO_KEY, "1");
-      setIntroDone(true);
-      setMood("idle");
-    }, 14000);
-    return () => window.clearTimeout(t);
-  }, [introDone]);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typed, busy, tab]);
 
   const langLabel = LANGUAGES.find((l) => l.code === lang)?.label ?? "انگلیسی";
-  const immersiveChat = (tab === "chat" || tab === "live") && introDone;
-  const effectiveMood: StageMood = !introDone ? "intro" : "idle";
+  const immersiveChat = tab === "chat" || tab === "live";
+  const effectiveMood: StageMood = "idle";
 
   const caption =
-    mood === "intro"
-      ? "سلام، من پویام."
-      : mood === "listen" || listening
+    mood === "listen" || listening
         ? "دارم گوش می‌دهم… بگو."
         : busy
           ? "دارم فکر می‌کنم…"
@@ -331,26 +309,6 @@ export function PouyaMainApp() {
 
   return (
     <div className="relative flex min-h-dvh flex-col bg-stage text-fg" dir="ltr">
-      {!introDone ? (
-        <button
-          type="button"
-          className="absolute inset-0 z-40 flex items-center justify-center bg-stage"
-          onClick={() => {
-            sessionStorage.setItem(INTRO_KEY, "1");
-            setIntroDone(true);
-            setMood("idle");
-          }}
-          aria-label="ورود به پویا"
-        >
-          <div className="relative aspect-[9/16] h-[min(100dvh,100svh)] w-auto max-w-[100vw] overflow-hidden bg-stage sm:h-auto sm:max-h-[min(100dvh,920px)] sm:w-full sm:max-w-[min(100vw,calc(100dvh*9/16))]">
-            <PouyaStage mood="intro" caption="سلام، من پویام." immersive showCaption />
-            <p className="pointer-events-none absolute inset-x-0 bottom-[12%] text-center text-sm text-cream/85 drop-shadow">
-              برای ادامه لمس کن
-            </p>
-          </div>
-        </button>
-      ) : null}
-
       {immersiveChat ? (
         <PouyaStage mood={effectiveMood} caption={caption} immersive showCaption={false} />
       ) : null}
