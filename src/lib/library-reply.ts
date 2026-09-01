@@ -1,4 +1,4 @@
-import { LESSONS, matchLesson, todayFact, localDaily, localLanguage } from "./library";
+import { LESSONS, matchLesson, todayFact, localDaily, localLanguage } from "./library-data";
 
 export function localTutorReply(opts: {
   messages: { role: "user" | "assistant"; content: string }[];
