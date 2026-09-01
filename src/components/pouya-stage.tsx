@@ -18,37 +18,14 @@ export function PouyaStage({
   showCaption?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const src =
-    mood === "intro"
-      ? "/pouya/intro.mp4"
-      : mood === "lookdown"
-        ? "/pouya/idle.jpg"
-        : "/pouya/talk.mp4";
-  const isVideo = src.endsWith(".mp4");
-  const loop = mood !== "intro" && isVideo;
+  const isIntro = mood === "intro";
 
   useEffect(() => {
     const el = videoRef.current;
-    if (!el || !isVideo) return;
-    el.loop = loop;
-    if (el.getAttribute("src") !== src) {
-      el.src = src;
-    }
+    if (!el || !isIntro) return;
+    el.loop = false;
     void el.play().catch(() => undefined);
-  }, [src, loop, mood, isVideo]);
-
-  const moodLabel =
-    mood === "intro"
-      ? "ورود"
-      : mood === "think"
-        ? "در حال فکر"
-        : mood === "talk"
-          ? "در حال گفتن"
-          : mood === "listen"
-            ? "دارم گوش می‌دهم"
-            : mood === "lookdown"
-              ? "دارم می‌خونم"
-              : "آماده";
+  }, [isIntro]);
 
   return (
     <section
@@ -62,17 +39,12 @@ export function PouyaStage({
       )}
       aria-label="استودیوی پویا"
     >
-      {isVideo ? (
+      {isIntro ? (
         <video
           ref={videoRef}
-          className={cn(
-            "absolute inset-0 size-full object-cover transition-all duration-slow ease-out",
-            mood === "lookdown" ? "object-[center_42%] scale-[1.06]" : "object-[center_18%]",
-            mood === "think" && "scale-[1.04]",
-            (mood === "talk" || mood === "listen") && "scale-[1.02]",
-          )}
+          className="absolute inset-0 size-full object-cover object-center"
           poster="/pouya/idle.jpg"
-          src={src}
+          src="/pouya/intro.mp4"
           muted
           playsInline
           autoPlay
@@ -82,10 +54,7 @@ export function PouyaStage({
         <img
           src="/pouya/idle.jpg"
           alt=""
-          className={cn(
-            "absolute inset-0 size-full object-cover transition-all duration-slow ease-out",
-            mood === "lookdown" ? "object-[center_48%] scale-[1.08]" : "object-[center_22%]",
-          )}
+          className="absolute inset-0 size-full object-cover object-center"
         />
       )}
       <div
@@ -96,18 +65,15 @@ export function PouyaStage({
       />
       <div className="felt-grain pointer-events-none absolute inset-0" />
       {showCaption ? (
-        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 lg:p-6">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
           <p
             className={cn(
-              "max-w-[28rem] text-balance font-display text-sm font-medium text-cream/95 drop-shadow-sm sm:text-base",
-              mood === "think" && "shimmer-text",
+              "max-w-[18rem] text-center text-balance font-display font-medium text-cream drop-shadow-md",
+              isIntro ? "text-xl sm:text-2xl" : "text-sm sm:text-base",
             )}
           >
             {caption}
           </p>
-          <span className="hidden rounded-full border border-cream/20 bg-ink/25 px-3 py-1 text-xs text-cream/80 backdrop-blur-sm sm:inline">
-            {moodLabel}
-          </span>
         </div>
       ) : null}
     </section>
