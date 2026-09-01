@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="پویا">
-  <rect width="16" height="16" rx="4" fill="#B4232A"/>
-  <circle cx="8" cy="8.6" r="5" fill="#D4A574"/>
-  <path fill="#2C2826" d="M3.4 8.2c0-3.7 9.2-3.7 9.2 0 0-2.5-2-4-4.6-4s-4.6 1.5-4.6 4z"/>
-  <circle cx="6.15" cy="8.15" r="1.1" fill="#2C2826"/>
-  <circle cx="9.85" cy="8.15" r="1.1" fill="#2C2826"/>
-  <ellipse cx="8" cy="11.35" rx="2.45" ry="1.4" fill="#2C2826"/>
-</svg>
