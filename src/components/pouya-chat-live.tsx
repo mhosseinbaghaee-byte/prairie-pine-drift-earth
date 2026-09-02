@@ -1,7 +1,6 @@
 import { type RefObject } from "react";
-import { Bookmark, BookOpen, Languages, Mic, Send, Volume2, VolumeX } from "lucide-react";
+import { Bookmark, BookOpen, Languages, Mic, Send } from "lucide-react";
 import {
-  LEVELS,
   LANGUAGES,
   SCENARIOS,
   TOPICS,
@@ -33,69 +32,31 @@ function Bubble({ role, text, live }: { role: "user" | "assistant"; text: string
   );
 }
 
-function RedShellToolbar({
-  level,
-  setLevel,
-  voiceOn,
-  setVoiceOn,
+function ActionBar({
   onNew,
   onSave,
   canSave,
 }: {
-  level: Level;
-  setLevel: (v: Level) => void;
-  voiceOn: boolean;
-  setVoiceOn: (v: boolean) => void;
   onNew: () => void;
   onSave: () => void;
   canSave: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 sm:px-4">
-      <div className="flex items-center gap-2">
-        <div className="flex rounded-full border border-white/25 bg-white/15 p-0.5 backdrop-blur-md">
-          {LEVELS.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              title={l.hint}
-              onClick={() => setLevel(l.id)}
-              className={cn(
-                "h-8 rounded-full px-2.5 text-xs transition",
-                level === l.id ? "bg-white text-ink" : "text-cream/85 hover:text-cream",
-              )}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setVoiceOn(!voiceOn)}
-          className="size-9 shrink-0 text-cream hover:bg-white/15 hover:text-cream"
-          aria-pressed={voiceOn}
-          aria-label={voiceOn ? "قطع صدا" : "روشن کردن صدا"}
-        >
-          {voiceOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-        </Button>
-      </div>
+    <div className="flex items-center px-3 py-2 sm:px-4">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onSave}
+        disabled={!canSave}
+        className="gap-1 text-cream/90 hover:bg-white/15 hover:text-cream"
+      >
+        <Bookmark className="size-4" />
+        ذخیره
+      </Button>
       <div className="min-w-0 flex-1" />
-      <div className="flex items-center gap-1.5">
-        <Button variant="ghost" size="sm" onClick={onNew} className="text-cream/90 hover:bg-white/15 hover:text-cream">
-          گفتگوی تازه
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onSave}
-          disabled={!canSave}
-          className="gap-1 text-cream/90 hover:bg-white/15 hover:text-cream"
-        >
-          <Bookmark className="size-4" />
-          ذخیره
-        </Button>
-      </div>
+      <Button variant="ghost" size="sm" onClick={onNew} className="text-cream/90 hover:bg-white/15 hover:text-cream">
+        گفتگوی تازه
+      </Button>
     </div>
   );
 }
@@ -112,21 +73,17 @@ export function ChatPane({
   onTypingFocus?: (focused: boolean) => void;
 }) {
   const empty = messages.length === 0 && !typed;
+  void level;
+  void setLevel;
+  void voiceOn;
+  void setVoiceOn;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <RedShellToolbar
-        level={level}
-        setLevel={setLevel}
-        voiceOn={voiceOn}
-        setVoiceOn={setVoiceOn}
-        onNew={onNew}
-        onSave={onSave}
-        canSave={messages.some((m) => m.role === "assistant")}
-      />
+      <ActionBar onNew={onNew} onSave={onSave} canSave={messages.some((m) => m.role === "assistant")} />
 
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
         {empty ? (
-          <div className="mx-auto flex max-w-xl flex-col gap-5 pt-6 text-center">
+          <div className="mx-auto flex max-w-xl flex-col gap-5 pt-4 text-center">
             <div>
               <h1 className="font-display text-2xl font-medium tracking-tight text-cream drop-shadow-sm sm:text-3xl">چی دوست داری یاد بگیری؟</h1>
               <p className="mt-2 text-sm text-cream/75">بپرس، درس کوتاه بگیر، یا با صدا حرف بزن.</p>
@@ -234,17 +191,13 @@ export function LivePane({
 }) {
   const empty = messages.length === 0 && !typed;
   const currentLang = LANGUAGES.find((l) => l.code === lang);
+  void level;
+  void setLevel;
+  void voiceOn;
+  void setVoiceOn;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <RedShellToolbar
-        level={level}
-        setLevel={setLevel}
-        voiceOn={voiceOn}
-        setVoiceOn={setVoiceOn}
-        onNew={onNew}
-        onSave={onSave}
-        canSave={messages.some((m) => m.role === "assistant")}
-      />
+      <ActionBar onNew={onNew} onSave={onSave} canSave={messages.some((m) => m.role === "assistant")} />
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
         {empty ? (
           <div className="mx-auto flex max-w-xl flex-col gap-5 pt-4">
