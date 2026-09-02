@@ -65,8 +65,8 @@ export function PouyaStage({
         )}
       />
       {showCaption ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[14%] flex items-center justify-center px-6">
-          <p className="max-w-[20rem] text-center text-balance font-display text-base font-medium leading-relaxed text-cream drop-shadow-md sm:text-lg">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[18%] flex items-end justify-center px-6">
+          <p className="max-w-[18rem] whitespace-pre-line text-center text-balance font-display text-base font-medium leading-relaxed text-cream drop-shadow-md sm:text-lg">
             {caption}
           </p>
         </div>
