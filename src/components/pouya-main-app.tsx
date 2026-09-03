@@ -310,14 +310,14 @@ export function PouyaMainApp() {
   return (
     <div
       className={cn(
-        "flex min-h-dvh flex-col text-fg",
+        "flex min-h-dvh w-full min-w-0 flex-col overflow-x-hidden text-fg",
         redShell ? "bg-stage" : "bg-background",
       )}
       dir="rtl"
     >
       <header
         className={cn(
-          "flex shrink-0 flex-col gap-2 px-3 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2 sm:px-4",
+          "flex w-full shrink-0 flex-col gap-2 px-3 pt-[max(0.55rem,env(safe-area-inset-top))] pb-2 sm:px-4",
           redShell
             ? "border-b border-white/10 bg-stage-deep/30 backdrop-blur-md"
             : "border-b border-border bg-card/80 backdrop-blur-md",
@@ -325,7 +325,7 @@ export function PouyaMainApp() {
       >
         <nav
           className={cn(
-            "pouya-glass-nav w-full justify-between",
+            "pouya-glass-nav w-full min-w-0",
             redShell && "pouya-glass-nav-on-red",
           )}
           aria-label="بخش‌ها"
@@ -348,7 +348,7 @@ export function PouyaMainApp() {
                 if (id === "live") setMode("live");
                 else if (id === "chat") setMode("chat");
               }}
-              className={cn("pouya-glass-tab shrink-0", tab === id && "pouya-glass-tab-active")}
+              className={cn("pouya-glass-tab", tab === id && "pouya-glass-tab-active")}
               aria-current={tab === id ? "page" : undefined}
               title={label}
             >
@@ -359,8 +359,8 @@ export function PouyaMainApp() {
         </nav>
 
         {redShell ? (
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-full border border-white/25 bg-white/15 p-0.5 backdrop-blur-md">
+          <div className="flex w-full min-w-0 items-center gap-2">
+            <div className="flex min-w-0 flex-1 rounded-full border border-white/25 bg-white/15 p-0.5 backdrop-blur-md">
               {LEVELS.map((l) => (
                 <button
                   key={l.id}
@@ -368,7 +368,7 @@ export function PouyaMainApp() {
                   title={l.hint}
                   onClick={() => setLevel(l.id)}
                   className={cn(
-                    "h-8 min-h-8 rounded-full px-3 text-xs transition",
+                    "h-8 min-h-8 min-w-0 flex-1 rounded-full px-2 text-xs transition",
                     level === l.id ? "bg-white text-ink" : "text-cream/85 hover:text-cream",
                   )}
                 >
@@ -379,7 +379,7 @@ export function PouyaMainApp() {
             <button
               type="button"
               onClick={() => setVoiceOn(!voiceOn)}
-              className="inline-flex size-9 items-center justify-center rounded-full text-cream hover:bg-white/15"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-cream hover:bg-white/15"
               aria-pressed={voiceOn}
               aria-label={voiceOn ? "قطع صدا" : "روشن کردن صدا"}
             >
