@@ -1,35 +1,40 @@
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
-const GLANCES = [
-  { start: 0.95, end: 2.35 },
-  { start: 4.05, end: 5.55 },
-  { start: 5.9, end: 6.65 },
-  { start: 7.0, end: 8.4 },
-  { start: 8.8, end: 9.85 },
-  { start: 0.05, end: 0.72 },
+/** Peak poses from glance.mp4 — same 4-direction clip as cursor-scrub-video. */
+const KEYS = [
+  { angle: 0, t: 4.95 },
+  { angle: 90, t: 9.35 },
+  { angle: 180, t: 1.85 },
+  { angle: 270, t: 7.95 },
 ] as const;
-
-const IDLES = [0.12, 3.15, 7.9];
+const NEUTRAL_T = 0.18;
+const BLINK_T = 6.28;
+const DEADZONE = 0.1;
+const TAU = 0.18;
 
 function rand(min: number, max: number) {
   return min + Math.random() * (max - min);
 }
 
-function pick<T>(arr: readonly T[], avoid?: T): T {
-  if (arr.length === 1) return arr[0] as T;
-  let next = arr[Math.floor(Math.random() * arr.length)] as T;
-  if (avoid !== undefined) {
-    let guard = 0;
-    while (next === avoid && guard < 6) {
-      next = arr[Math.floor(Math.random() * arr.length)] as T;
-      guard += 1;
-    }
-  }
-  return next;
+function angleDiff(a: number, b: number) {
+  return ((((a - b) % 360) + 540) % 360) - 180;
 }
 
-function PouyaLivingHead() {
+function nearestKeyTime(angle: number) {
+  let bestT = KEYS[0]!.t;
+  let bestD = 999;
+  for (const k of KEYS) {
+    const d = Math.abs(angleDiff(angle, k.angle));
+    if (d < bestD) {
+      bestD = d;
+      bestT = k.t;
+    }
+  }
+  return bestT;
+}
+
+function PouyaLivingHead({ track = "window" }: { track?: "window" | "idle" }) {
   const ref = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -37,65 +42,87 @@ function PouyaLivingHead() {
     if (!el) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let cancelled = false;
-    const timers: number[] = [];
-    let lastStart = -1;
+    let ready = false;
+    let seeking = false;
+    let current = NEUTRAL_T;
+    let target = NEUTRAL_T;
+    let lastPointer = 0;
+    let wanderAt = performance.now() + rand(1800, 5200);
+    let raf = 0;
 
-    const later = (fn: () => void, ms: number) => {
-      const id = window.setTimeout(fn, ms);
-      timers.push(id);
+    const onSeeking = () => {
+      seeking = true;
     };
-
-    const freezeIdle = () => {
-      if (cancelled) return;
-      el.pause();
-      try {
-        el.currentTime = pick(IDLES);
-      } catch {
-        /* ignore seek */
-      }
+    const onSeeked = () => {
+      seeking = false;
     };
-
-    const schedule = () => {
-      if (cancelled || reduced) return;
-      const longStill = Math.random() < 0.42;
-      later(playGlance, longStill ? rand(4800, 15000) : rand(1100, 4600));
-    };
-
-    const playGlance = () => {
-      if (cancelled) return;
-      const g = pick(GLANCES, GLANCES.find((x) => x.start === lastStart));
-      lastStart = g.start;
-      const dur = Math.max(0.4, (g.end - g.start) * rand(0.72, 1.18));
-      try {
-        el.currentTime = g.start;
-      } catch {
-        /* ignore */
-      }
-      void el.play().catch(() => undefined);
-      later(() => {
-        freezeIdle();
-        if (!cancelled && Math.random() < 0.16) {
-          later(playGlance, rand(180, 700));
-        } else {
-          schedule();
-        }
-      }, dur * 1000);
-    };
-
     const onReady = () => {
-      freezeIdle();
-      if (!reduced) schedule();
+      ready = true;
     };
 
-    if (el.readyState >= 1) onReady();
-    else el.addEventListener("loadedmetadata", onReady, { once: true });
+    el.addEventListener("seeking", onSeeking);
+    el.addEventListener("seeked", onSeeked);
+    el.addEventListener("loadedmetadata", onReady);
+    el.addEventListener("canplaythrough", onReady);
+    void el.play().then(() => el.pause()).catch(() => undefined);
+
+    const setPointerTarget = (clientX: number, clientY: number) => {
+      lastPointer = performance.now();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const dx = clientX - vw / 2;
+      const dy = clientY - vh / 2;
+      const normX = Math.abs(dx) / Math.max(1, vw / 2);
+      const normY = Math.abs(dy) / Math.max(1, vh / 2);
+      const norm = Math.min(1, Math.max(normX, normY * 1.15));
+      let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+      if (angle < 0) angle += 360;
+      const deadT = Math.max(0, Math.min(1, (norm - DEADZONE) / (1 - DEADZONE)));
+      const eased = deadT * deadT * (3 - 2 * deadT);
+      target = NEUTRAL_T + (nearestKeyTime(angle) - NEUTRAL_T) * eased;
+    };
+
+    const onMove = (e: PointerEvent) => setPointerTarget(e.clientX, e.clientY);
+
+    if (track === "window" && !reduced) {
+      window.addEventListener("pointermove", onMove, { passive: true });
+      window.addEventListener("pointerdown", onMove, { passive: true });
+    }
+
+    const tick = () => {
+      if (cancelled) return;
+      const now = performance.now();
+      if (!reduced && now - lastPointer > 2400 && now >= wanderAt) {
+        const roll = Math.random();
+        if (roll < 0.55) target = NEUTRAL_T;
+        else if (roll < 0.68) target = BLINK_T;
+        else target = KEYS[Math.floor(Math.random() * KEYS.length)]!.t;
+        wanderAt = now + rand(2200, 11000);
+      }
+      if (ready && Number.isFinite(el.duration) && el.duration > 0) {
+        const alpha = 1 - Math.exp(-(1 / 60) / TAU);
+        current += (target - current) * alpha;
+        const t = Math.max(0, Math.min(el.duration - 0.04, current));
+        if (!seeking && Math.abs(el.currentTime - t) > 0.012) {
+          el.currentTime = t;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
 
     return () => {
       cancelled = true;
-      timers.forEach((id) => window.clearTimeout(id));
+      cancelAnimationFrame(raf);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", onMove);
+      el.removeEventListener("seeking", onSeeking);
+      el.removeEventListener("seeked", onSeeked);
+      el.removeEventListener("loadedmetadata", onReady);
+      el.removeEventListener("canplaythrough", onReady);
       el.pause();
     };
-  }, []);
+  }, [track]);
 
   return (
     <video
@@ -105,6 +132,7 @@ function PouyaLivingHead() {
       muted
       playsInline
       preload="auto"
+      disableRemotePlayback
       aria-hidden
     />
   );
@@ -133,7 +161,7 @@ export function PouyaFaceButton({
         className,
       )}
     >
-      <PouyaLivingHead />
+      <PouyaLivingHead track="window" />
     </button>
   );
 }
@@ -147,7 +175,7 @@ export function PouyaVoiceOrb({
     <div className={cn("pouya-voice-orb", `is-${phase}`)} aria-hidden>
       <div className="pouya-voice-orb-ring" />
       <div className="pouya-voice-orb-core">
-        <PouyaLivingHead />
+        <PouyaLivingHead track="window" />
       </div>
     </div>
   );
