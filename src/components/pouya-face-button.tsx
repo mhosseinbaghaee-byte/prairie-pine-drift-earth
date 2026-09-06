@@ -21,8 +21,8 @@ function angleDiff(a: number, b: number) {
   return ((((a - b) % 360) + 540) % 360) - 180;
 }
 
-function nearestKeyTime(angle: number) {
-  let bestT = KEYS[0]!.t;
+function nearestKeyTime(angle: number): number {
+  let bestT: number = KEYS[0]!.t;
   let bestD = 999;
   for (const k of KEYS) {
     const d = Math.abs(angleDiff(angle, k.angle));
