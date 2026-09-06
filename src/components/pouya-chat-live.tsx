@@ -12,6 +12,7 @@ import { RichText } from "./rich-text";
 import { Button } from "./ui/button";
 import { Textarea } from "./ui/input";
 import type { ChatMode } from "@/lib/ai";
+import { PouyaFaceButton } from "./pouya-face-button";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
@@ -63,7 +64,7 @@ function ActionBar({
 
 export function ChatPane({
   messages, typed, busy, draft, setDraft, level, setLevel, voiceOn, setVoiceOn, mode, listening,
-  scrollerRef, onSend, onLesson, onDaily, onFact, onMic, onLivePractice, onNew, onSave, onTypingFocus,
+  scrollerRef, onSend, onLesson, onDaily, onFact, onMic, onLivePractice, onNew, onSave, onTypingFocus, onVoiceCall,
 }: {
   messages: ChatMsg[]; typed: string; busy: boolean; draft: string; setDraft: (v: string) => void;
   level: Level; setLevel: (v: Level) => void; voiceOn: boolean; setVoiceOn: (v: boolean) => void;
@@ -71,6 +72,7 @@ export function ChatPane({
   onSend: (t: string) => void; onLesson: (t: string) => void; onDaily: () => void; onFact: () => void;
   onMic: () => void; onLivePractice: () => void; onNew: () => void; onSave: () => void;
   onTypingFocus?: (focused: boolean) => void;
+  onVoiceCall?: () => void;
 }) {
   const empty = messages.length === 0 && !typed;
   void level;
@@ -83,8 +85,8 @@ export function ChatPane({
 
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
         {empty ? (
-          <div className="mx-auto flex max-w-xl flex-col gap-5 pt-4 text-center">
-            <div>
+          <div className="mx-auto flex w-full max-w-xl min-w-0 flex-col gap-5 pt-4 text-center">
+            <div className="px-1">
               <h1 className="font-display text-2xl font-medium tracking-tight text-cream drop-shadow-sm sm:text-3xl">چی دوست داری یاد بگیری؟</h1>
               <p className="mt-2 text-sm text-cream/75">بپرس، درس کوتاه بگیر، یا با صدا حرف بزن.</p>
             </div>
@@ -148,6 +150,7 @@ export function ChatPane({
           disabled={busy}
         />
         <div className="mt-1 flex items-center gap-2">
+          <PouyaFaceButton onClick={onVoiceCall} label="گفتگوی صوتی با پویا" disabled={busy} />
           <Button
             type="button"
             size="icon"
@@ -180,7 +183,7 @@ export function ChatPane({
 
 export function LivePane({
   messages, typed, busy, draft, setDraft, level, setLevel, voiceOn, setVoiceOn, lang, setLang,
-  listening, scrollerRef, onSend, onScenario, onMic, onNew, onSave, onTypingFocus,
+  listening, scrollerRef, onSend, onScenario, onMic, onNew, onSave, onTypingFocus, onVoiceCall,
 }: {
   messages: ChatMsg[]; typed: string; busy: boolean; draft: string; setDraft: (v: string) => void;
   level: Level; setLevel: (v: Level) => void; voiceOn: boolean; setVoiceOn: (v: boolean) => void;
@@ -188,6 +191,7 @@ export function LivePane({
   scrollerRef: RefObject<HTMLDivElement | null>; onSend: (t: string) => void;
   onScenario: (prompt: string) => void; onMic: () => void; onNew: () => void; onSave: () => void;
   onTypingFocus?: (focused: boolean) => void;
+  onVoiceCall?: () => void;
 }) {
   const empty = messages.length === 0 && !typed;
   const currentLang = LANGUAGES.find((l) => l.code === lang);
@@ -237,6 +241,7 @@ export function LivePane({
           className="max-h-36 min-h-14 w-full resize-none border-0 bg-transparent px-1 py-1 text-base text-ink shadow-none focus-visible:ring-0"
           disabled={busy} />
         <div className="mt-1 flex items-center gap-2">
+          <PouyaFaceButton onClick={onVoiceCall} label="گفتگوی صوتی با پویا" disabled={busy} />
           <Button type="button" size="icon" variant={listening ? "default" : "outline"} onClick={onMic} disabled={busy}
             className={cn("rounded-full", listening ? "bg-stage text-cream hover:bg-stage-deep" : "border-border/60 bg-white/70")}>
             <Mic className="size-4" />

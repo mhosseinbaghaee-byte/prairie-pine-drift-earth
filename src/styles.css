@@ -188,6 +188,7 @@
   background: color-mix(in srgb, var(--color-cream) 88%, transparent);
 }
 
+/* Immersive chat (Hooshang-inspired) */
 .pouya-immersive-veil {
   background: linear-gradient(
     to top,
@@ -231,4 +232,73 @@
     0 0 0 1px color-mix(in srgb, var(--color-stage) 35%, transparent),
     0 0 0 3px color-mix(in srgb, #ffffff 25%, transparent),
     0 4px 14px color-mix(in srgb, var(--color-ink) 12%, transparent);
+}
+
+.pouya-face-btn {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-stage-deep);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #ffffff 35%, transparent);
+}
+.pouya-face-btn img,
+.pouya-face-btn video,
+.pouya-voice-orb-core img,
+.pouya-voice-orb-core video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 18%;
+  pointer-events: none;
+}
+
+.pouya-voice-orb {
+  position: relative;
+  width: min(52vw, 13.5rem);
+  aspect-ratio: 1;
+}
+.pouya-voice-orb-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 50% 42%,
+    color-mix(in srgb, var(--color-stage) 55%, transparent) 0%,
+    color-mix(in srgb, var(--color-stage-deep) 80%, transparent) 70%,
+    transparent 72%
+  );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #ffffff 18%, transparent),
+    0 18px 50px color-mix(in srgb, var(--color-ink) 40%, transparent);
+}
+.pouya-voice-orb-core {
+  position: absolute;
+  inset: 9%;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--color-stage);
+}
+.pouya-voice-orb.is-listen .pouya-voice-orb-ring {
+  animation: orb-breathe 1.8s ease-in-out infinite;
+}
+.pouya-voice-orb.is-talk .pouya-voice-orb-ring {
+  animation: orb-talk 0.72s ease-in-out infinite;
+}
+.pouya-voice-orb.is-think .pouya-voice-orb-ring {
+  animation: orb-breathe 2.6s ease-in-out infinite;
+}
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+@keyframes orb-talk {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pouya-voice-orb-ring {
+    animation: none;
+  }
 }

@@ -388,7 +388,7 @@ export const speakPouya = createServerFn({ method: "POST" })
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
           body: JSON.stringify({
             model: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts",
-            voice: process.env.OPENAI_TTS_VOICE || "alloy",
+            voice: process.env.OPENAI_TTS_VOICE || "onyx",
             input: text,
           }),
         });

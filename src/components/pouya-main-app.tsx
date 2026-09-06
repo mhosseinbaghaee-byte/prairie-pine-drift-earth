@@ -31,6 +31,7 @@ import { AccountPane } from "./account-pane";
 import { loadProfile } from "@/lib/profile";
 import type { Assistant } from "@/lib/assistants";
 import { ChatPane, LivePane, QuizPane, VaultPane } from "./pouya-panes";
+import { PouyaVoiceCall, type VoicePhase } from "./pouya-voice-call";
 
 type Tab = "chat" | "live" | "quiz" | "vault" | "coaches" | "account";
 type ChatMsg = { role: "user" | "assistant"; content: string };
@@ -79,6 +80,7 @@ export function PouyaMainApp() {
   const [mode, setMode] = useState<ChatMode>("chat");
   const [lang, setLang] = useState<LangCode>("en");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const messagesRef = useRef<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
@@ -97,14 +99,29 @@ export function PouyaMainApp() {
     if (typeof window === "undefined") return false;
     return sessionStorage.getItem(INTRO_KEY) === "1";
   });
+  const [voiceCall, setVoiceCall] = useState(false);
+  const [callMuted, setCallMuted] = useState(false);
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
+  const voiceCallRef = useRef(false);
+  const callMutedRef = useRef(false);
+  const busyRef = useRef(false);
 
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typed, busy, tab]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
 
   async function playVoice(text: string) {
-    if (!voiceOn) return;
+    if (!voiceOn && !voiceCallRef.current) return;
     const spoken = spokenSlice(text);
+    const finish = () => {
+      voiceActiveRef.current = false;
+      setMood("idle");
+      if (voiceCallRef.current) setVoicePhase(callMutedRef.current ? "idle" : "listen");
+    };
     try {
       const res = await speakPouya({ data: { text: spoken, lang: langById(lang).locale } });
       if (res.ok) {
@@ -115,11 +132,21 @@ export function PouyaMainApp() {
         audioRef.current = audio;
         voiceActiveRef.current = true;
         setMood("talk");
-        audio.onended = () => {
-          voiceActiveRef.current = false;
-          setMood("idle");
-        };
-        await audio.play();
+        if (voiceCallRef.current) setVoicePhase("talk");
+        await new Promise<void>((resolve) => {
+          audio.onended = () => {
+            finish();
+            resolve();
+          };
+          audio.onerror = () => {
+            finish();
+            resolve();
+          };
+          void audio.play().catch(() => {
+            finish();
+            resolve();
+          });
+        });
         return;
       }
     } catch {
@@ -129,14 +156,30 @@ export function PouyaMainApp() {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(spoken);
     utter.lang = langById(lang).locale;
-    utter.rate = 1;
-    utter.onend = () => {
-      voiceActiveRef.current = false;
-      setMood("idle");
-    };
-    voiceActiveRef.current = true;
-    setMood("talk");
-    window.speechSynthesis.speak(utter);
+    utter.rate = 0.96;
+    utter.pitch = 0.92;
+    const voices = window.speechSynthesis.getVoices();
+    const locale = langById(lang).locale;
+    const pool = voices.filter((v) => v.lang.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()));
+    const male =
+      pool.find((v) => /male|mohammad|farid|davood|reza|hossein|nasser|dariush|onyx|echo/i.test(v.name)) ||
+      pool.find((v) => !/female|woman|girl|sara|nazanin|alloy|nova|shimmer/i.test(v.name)) ||
+      pool[0];
+    if (male) utter.voice = male;
+    await new Promise<void>((resolve) => {
+      utter.onend = () => {
+        finish();
+        resolve();
+      };
+      utter.onerror = () => {
+        finish();
+        resolve();
+      };
+      voiceActiveRef.current = true;
+      setMood("talk");
+      if (voiceCallRef.current) setVoicePhase("talk");
+      window.speechSynthesis.speak(utter);
+    });
   }
 
   async function send(text: string, nextMode: ChatMode = mode, nextLang?: LangCode) {
@@ -151,6 +194,7 @@ export function PouyaMainApp() {
     const history: ChatMsg[] = [...messages, { role: "user", content }];
     setMessages(history);
     setBusy(true);
+    busyRef.current = true;
     setMood("think");
     audioRef.current?.pause();
     voiceActiveRef.current = false;
@@ -182,6 +226,7 @@ export function PouyaMainApp() {
       if (!voiceActiveRef.current) setMood("idle");
     } finally {
       setBusy(false);
+      busyRef.current = false;
     }
   }
 
@@ -250,6 +295,135 @@ export function PouyaMainApp() {
       toast.error("میکروفون شروع نشد. دسترسی را چک کن.");
       stopMic();
       setMood("idle");
+    }
+  }
+
+  function startCallListen() {
+    if (!voiceCallRef.current || callMutedRef.current || busyRef.current) return;
+    const SR = getSpeechRecognition();
+    if (!SR) {
+      toast.error("برای گفتگوی صوتی از Chrome یا Edge استفاده کن.");
+      return;
+    }
+    stopMic();
+    const rec = new SR();
+    rec.lang = "fa-IR";
+    rec.interimResults = false;
+    rec.continuous = false;
+    rec.onresult = (ev) => {
+      const said = (ev.results[0]?.[0]?.transcript || "").trim();
+      if (said) void sendVoice(said);
+    };
+    rec.onend = () => {
+      setListening(false);
+      recRef.current = null;
+      if (voiceCallRef.current && !callMutedRef.current && !busyRef.current && !voiceActiveRef.current) {
+        window.setTimeout(() => startCallListen(), 280);
+      }
+    };
+    rec.onerror = () => {
+      setListening(false);
+      recRef.current = null;
+      if (voiceCallRef.current) setVoicePhase("idle");
+    };
+    recRef.current = rec;
+    setListening(true);
+    setMood("listen");
+    setVoicePhase("listen");
+    try {
+      window.speechSynthesis?.cancel();
+      audioRef.current?.pause();
+      rec.start();
+    } catch {
+      toast.error("میکروفون شروع نشد. دسترسی را چک کن.");
+      stopMic();
+      setVoicePhase("idle");
+    }
+  }
+
+  async function sendVoice(text: string) {
+    const content = text.trim();
+    if (!content || busyRef.current) return;
+    stopMic();
+    setDraft("");
+    const history: ChatMsg[] = [...messagesRef.current, { role: "user", content }];
+    setMessages(history);
+    setBusy(true);
+    busyRef.current = true;
+    setMood("think");
+    setVoicePhase("think");
+    audioRef.current?.pause();
+    voiceActiveRef.current = false;
+    try {
+      const res = await askPouya({
+        data: {
+          messages: history.slice(-12),
+          level,
+          mode: "live",
+          lang,
+          assistantId,
+        },
+      });
+      const reply =
+        res && typeof res === "object" && "ok" in res && res.ok && "text" in res && typeof res.text === "string"
+          ? res.text
+          : localTutorReply({ messages: history.slice(-12), mode: "live", lang });
+      setMessages([...history, { role: "assistant", content: reply }]);
+      setMood("talk");
+      setVoicePhase("talk");
+      await playVoice(reply);
+    } catch {
+      const reply = localTutorReply({ messages: history.slice(-12), mode: "live", lang });
+      setMessages([...history, { role: "assistant", content: reply }]);
+      await playVoice(reply);
+    } finally {
+      setBusy(false);
+      busyRef.current = false;
+      if (voiceCallRef.current && !callMutedRef.current) startCallListen();
+      else if (voiceCallRef.current) setVoicePhase("idle");
+    }
+  }
+
+  async function openVoiceCall() {
+    stopMic();
+    setVoiceOn(true);
+    voiceCallRef.current = true;
+    callMutedRef.current = false;
+    setCallMuted(false);
+    setVoiceCall(true);
+    setVoicePhase("talk");
+    const greeting = "سلام، من پویا هستم. هر چیزی که تو ذهنت هست بگو تا کمکت کنم.";
+    if (!messagesRef.current.length) {
+      setMessages([{ role: "assistant", content: greeting }]);
+      await playVoice(greeting);
+    }
+    if (voiceCallRef.current && !callMutedRef.current) startCallListen();
+  }
+
+  function closeVoiceCall() {
+    voiceCallRef.current = false;
+    callMutedRef.current = false;
+    stopMic();
+    audioRef.current?.pause();
+    window.speechSynthesis?.cancel();
+    voiceActiveRef.current = false;
+    setVoiceCall(false);
+    setCallMuted(false);
+    setVoicePhase("idle");
+    setMood("idle");
+  }
+
+  function toggleCallMute() {
+    const next = !callMutedRef.current;
+    callMutedRef.current = next;
+    setCallMuted(next);
+    if (next) {
+      stopMic();
+      audioRef.current?.pause();
+      window.speechSynthesis?.cancel();
+      setVoicePhase("idle");
+    } else {
+      startCallListen();
     }
   }
 
@@ -416,6 +590,7 @@ export function PouyaMainApp() {
             onNew={newChat}
             onSave={() => saveLast()}
             onTypingFocus={setTypingFocus}
+            onVoiceCall={() => void openVoiceCall()}
           />
         ) : null}
 
@@ -440,6 +615,7 @@ export function PouyaMainApp() {
             onNew={newChat}
             onSave={() => saveLast()}
             onTypingFocus={setTypingFocus}
+            onVoiceCall={() => void openVoiceCall()}
           />
         ) : null}
 
@@ -473,6 +649,20 @@ export function PouyaMainApp() {
           </div>
         ) : null}
       </div>
+
+      {voiceCall ? (
+        <PouyaVoiceCall
+          phase={voicePhase}
+          muted={callMuted}
+          lastUser={[...messages].reverse().find((m) => m.role === "user")?.content}
+          lastAssistant={[...messages].reverse().find((m) => m.role === "assistant")?.content}
+          draft={draft}
+          setDraft={setDraft}
+          onClose={closeVoiceCall}
+          onToggleMute={toggleCallMute}
+          onSend={(t) => void sendVoice(t)}
+        />
+      ) : null}
     </div>
   );
 }
