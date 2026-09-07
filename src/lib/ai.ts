@@ -39,6 +39,14 @@ type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; e
 type ProviderId = "xai" | "anthropic" | "openai" | "gemini";
 
 const XAI_MODELS = ["grok-4.5", "grok-4-fast", "grok-3"];
+/** Current Gemini IDs (2026). Older 1.5/2.0 ids often 404 for new AI Studio keys. */
+const GEMINI_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash",
+];
 const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai", "anthropic", "xai"];
 
 function levelLine(level: Level) {
@@ -165,12 +173,17 @@ async function callXai(
         body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.7 }),
       });
       if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
-      if (!res.ok) { last = await readError(res); continue; }
+      if (!res.ok) {
+        last = await readError(res);
+        continue;
+      }
       const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const text = body.choices?.[0]?.message?.content?.trim() ?? "";
       if (text) return { ok: true, text, provider: "xai" };
       last = "empty";
-    } catch { last = "network"; }
+    } catch {
+      last = "network";
+    }
   }
   return { ok: false, error: last };
 }
@@ -182,18 +195,33 @@ async function callAnthropic(system: string, history: ChatMsg[], maxTokens: numb
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
       body: JSON.stringify({
-        model, max_tokens: maxTokens, system,
-        messages: history.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+        model,
+        max_tokens: maxTokens,
+        system,
+        messages: history.map((m) => ({
+          role: m.role === "assistant" ? "assistant" : "user",
+          content: m.content,
+        })),
       }),
     });
     if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
     if (!res.ok) return { ok: false, error: await readError(res) };
     const body = (await res.json()) as { content?: Array<{ type?: string; text?: string }> };
-    const text = (body.content ?? []).filter((p) => p.type === "text" || typeof p.text === "string").map((p) => p.text ?? "").join("").trim();
+    const text = (body.content ?? [])
+      .filter((p) => p.type === "text" || typeof p.text === "string")
+      .map((p) => p.text ?? "")
+      .join("")
+      .trim();
     return text ? { ok: true, text, provider: "anthropic" } : { ok: false, error: "empty" };
-  } catch { return { ok: false, error: "network" }; }
+  } catch {
+    return { ok: false, error: "network" };
+  }
 }
 
 async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
@@ -205,44 +233,86 @@ async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number)
     const res = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, messages: [{ role: "system", content: system }, ...history], max_tokens: maxTokens, temperature: 0.7 }),
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "system", content: system }, ...history],
+        max_tokens: maxTokens,
+        temperature: 0.7,
+      }),
     });
     if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
     if (!res.ok) return { ok: false, error: await readError(res) };
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const text = body.choices?.[0]?.message?.content?.trim() ?? "";
     return text ? { ok: true, text, provider: "openai" } : { ok: false, error: "empty" };
-  } catch { return { ok: false, error: "network" }; }
+  } catch {
+    return { ok: false, error: "network" };
+  }
 }
 
 async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey) return null;
-  const models = [process.env.GEMINI_MODEL, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-latest"].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
+  if (!apiKey) {
+    console.error("[pouya-ai] GEMINI_API_KEY missing on server");
+    return null;
+  }
+  const models = [process.env.GEMINI_MODEL, ...GEMINI_MODELS].filter(
+    (m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i,
+  );
   let last = "gemini unavailable";
   for (const model of models) {
     try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: history.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
-        }),
-      });
-      if (isQuotaStatus(res.status)) { last = `quota:${res.status}`; continue; }
-      if (!res.ok) { last = await readError(res); continue; }
-      const body = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-      const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
-      if (text) return { ok: true, text, provider: "gemini" };
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: history.map((m) => ({
+              role: m.role === "assistant" ? "model" : "user",
+              parts: [{ text: m.content }],
+            })),
+            generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
+          }),
+        },
+      );
+      if (isQuotaStatus(res.status)) {
+        last = `quota:${res.status}`;
+        console.error("[pouya-ai] gemini quota", model, last);
+        continue;
+      }
+      if (!res.ok) {
+        last = await readError(res);
+        console.error("[pouya-ai] gemini fail", model, last);
+        continue;
+      }
+      const body = (await res.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const text = (body.candidates?.[0]?.content?.parts ?? [])
+        .map((p) => p.text ?? "")
+        .join("")
+        .trim();
+      if (text) {
+        console.info("[pouya-ai] gemini ok", model);
+        return { ok: true, text, provider: "gemini" };
+      }
       last = "empty";
-    } catch { last = "network"; }
+    } catch (err) {
+      last = "network";
+      console.error("[pouya-ai] gemini network", model, err);
+    }
   }
   return { ok: false, error: last };
 }
 
-async function runProvider(id: ProviderId, system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
+async function runProvider(
+  id: ProviderId,
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+): Promise<ChatResult | null> {
   if (id === "xai") return callXai([{ role: "system", content: system }, ...history], maxTokens);
   if (id === "anthropic") return callAnthropic(system, history, maxTokens);
   if (id === "openai") return callOpenAI(system, history, maxTokens);
@@ -250,15 +320,29 @@ async function runProvider(id: ProviderId, system: string, history: ChatMsg[], m
   return null;
 }
 
-async function chatComplete(system: string, history: ChatMsg[], maxTokens: number, fallback: () => string): Promise<{ ok: true; text: string; provider?: string }> {
+async function chatComplete(
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+  fallback: () => string,
+): Promise<{ ok: true; text: string; provider?: string }> {
   const order = providerOrder();
+  const errors: string[] = [];
   for (const id of order) {
     try {
       const result = await runProvider(id, system, history, maxTokens);
-      if (!result) continue;
+      if (!result) {
+        errors.push(`${id}:missing-key`);
+        continue;
+      }
       if (result.ok && result.text) return { ok: true, text: result.text, provider: result.provider || id };
-    } catch { /* try next */ }
+      if (!result.ok) errors.push(`${id}:${result.error}`);
+    } catch (err) {
+      errors.push(`${id}:throw`);
+      console.error("[pouya-ai] provider throw", id, err);
+    }
   }
+  console.error("[pouya-ai] all providers failed → local", errors.join(" | "));
   return { ok: true, text: fallback(), provider: "local" };
 }
 
@@ -315,12 +399,19 @@ export const makeQuiz = createServerFn({ method: "POST" })
               why: String(q.why ?? ""),
             }));
             if (!questions.some((q) => !q.q || q.options.length !== 4)) {
-              return { ok: true as const, quiz: { topic: parsed.topic || data.topic, questions } satisfies QuizPayload };
+              return {
+                ok: true as const,
+                quiz: { topic: parsed.topic || data.topic, questions } satisfies QuizPayload,
+              };
             }
           }
-        } catch { /* local */ }
+        } catch {
+          /* local */
+        }
       }
-    } catch { /* local */ }
+    } catch {
+      /* local */
+    }
     return { ok: true as const, quiz: localQuiz(data.topic) };
   });
 
@@ -371,8 +462,11 @@ export const speakPouya = createServerFn({ method: "POST" })
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${xaiKey}` },
           body: JSON.stringify({
-            text, voice_id: "zagan", language: ttsLanguage(data.lang),
-            output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 }, speed: 1.0,
+            text,
+            voice_id: "zagan",
+            language: ttsLanguage(data.lang),
+            output_format: { codec: "mp3", sample_rate: 24000, bit_rate: 96000 },
+            speed: 1.0,
           }),
         });
         if (res.ok) {
