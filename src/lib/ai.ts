@@ -58,71 +58,25 @@ function levelLine(level: Level) {
 function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId?: string) {
   const lang = langById(langId || "fa");
   const coach = assistantSystemExtra(assistantId);
-  const base = `تو «پویا» هستی: مربی نمدی زنده برای آموزش، اطلاعات عمومی، و آموزش زبان.
-شخصیت: گرم، کنجکاو، کمی شوخ، صمیمی — مثل یک معلم استاپ‌موشن روی صحنه قرمز، نه یک ربات خشک.
-قوانین سخت:
-- ${levelLine(level)}
-- اول اصل مطلب را روشن بگو، بعد در صورت نیاز عمیق‌تر شو.
-- از تشبیه ملموس استفاده کن.
-- واقعیت ساختگی نساز. اگر مطمئن نیستی، صریح بگو.
-- لحن گفتاری و زنده. از ایموجی استفاده نکن.
-- پاراگراف‌های کوتاه.` + (coach ? `\n\n${coach}` : "");
+  const base = `تو «پویا» هستی: مربی نمدی زنده برای آموزش، اطلاعات عمومی، و آموزش زبان.\nشخصیت: گرم، کنجکاو، کمی شوخ، صمیمی — مثل یک معلم استاپ‌موشن روی صحنه قرمز، نه یک ربات خشک.\nقوانین سخت:\n- ${levelLine(level)}\n- اول اصل مطلب را روشن بگو، بعد در صورت نیاز عمیق‌تر شو.\n- از تشبیه ملموس استفاده کن.\n- واقعیت ساختگی نساز. اگر مطمئن نیستی، صریح بگو.\n- لحن گفتاری و زنده. از ایموجی استفاده نکن.\n- پاراگراف‌های کوتاه.` + (coach ? `\n\n${coach}` : "");
 
   if (mode === "live") {
-    return `${base}
-
-حالت گفتگوی زنده صوتی:
-زبان گفتگو: ${lang.native} (${lang.locale}).
-تقریباً همه پاسخ را به همین زبان بگو.
-جواب را کوتاه نگه دار: ۲ تا ۵ جمله، مناسب خواندن با صدا. حداکثر ۹۰ کلمه.
-در پایان یک سؤال کوتاه بپرس تا مکالمه ادامه پیدا کند.
-اگر کاربر اشتباه زبانی داشت، طبیعی تصحیح کن بدون خجالت دادن.`;
+    return `${base}\n\nحالت گفتگوی زنده صوتی:\nزبان گفتگو: ${lang.native} (${lang.locale}).\nتقریباً همه پاسخ را به همین زبان بگو.\nجواب را کوتاه نگه دار: ۲ تا ۵ جمله، مناسب خواندن با صدا. حداکثر ۹۰ کلمه.\nدر پایان یک سؤال کوتاه بپرس تا مکالمه ادامه پیدا کند.\nاگر کاربر اشتباه زبانی داشت، طبیعی تصحیح کن بدون خجالت دادن.`;
   }
 
   if (mode === "language") {
-    return `${base}
-
-حالت آموزش زبان:
-زبان هدف: ${lang.native} (${lang.locale}).
-زبان مادری کاربر معمولاً فارسی است.
-ساختار هر پاسخ:
-1) پاسخ یا ادامه مکالمه به زبان هدف (کوتاه، سطح‌بندی‌شده)
-2) یک خط آوانگاری ساده اگر خط زبان برای فارسی‌زبان سخت است
-3) معنی فارسی در یک جمله
-4) اگر لازم است: یک تصحیح کوتاه («بهتر است بگویی: …»)
-5) یک سؤال یا تمرین بعدی به زبان هدف
-نوبت را کوتاه نگه دار تا برای گفتگوی زنده مناسب باشد.`;
+    return `${base}\n\nحالت آموزش زبان:\nزبان هدف: ${lang.native} (${lang.locale}).\nزبان مادری کاربر معمولاً فارسی است.\nساختار هر پاسخ:\n1) پاسخ یا ادامه مکالمه به زبان هدف (کوتاه، سطح‌بندی‌شده)\n2) یک خط آوانگاری ساده اگر خط زبان برای فارسی‌زبان سخت است\n3) معنی فارسی در یک جمله\n4) اگر لازم است: یک تصحیح کوتاه («بهتر است بگویی: …»)\n5) یک سؤال یا تمرین بعدی به زبان هدف\nنوبت را کوتاه نگه دار تا برای گفتگوی زنده مناسب باشد.`;
   }
 
   if (mode === "daily") {
-    return `${base}
-
-حالت مرور روزانه / مغز دوم:
-مثل یک مصاحبه‌گر شخصی باش. هر نوبت ۳ تا ۵ سؤال کوتاه بپرس — نه بیشتر.
-موضوع سؤال‌ها: کار امروز، پیشرفت، تصمیم، یادگیری، ایده، افراد، پیگیری، تمرکز بعدی.
-اگر جواب کلی بود یک follow-up مفید بپرس.
-وقتی اطلاعات کافی شد، یک یادداشت روزانه ساخت‌یافته پیشنهاد بده.
-زبان پاسخ: اگر کاربر فارسی نوشت فارسی، وگرنه به زبان خودش.`;
+    return `${base}\n\nحالت مرور روزانه / مغز دوم:\nمثل یک مصاحبه‌گر شخصی باش. هر نوبت ۳ تا ۵ سؤال کوتاه بپرس — نه بیشتر.\nموضوع سؤال‌ها: کار امروز، پیشرفت، تصمیم، یادگیری، ایده، افراد، پیگیری، تمرکز بعدی.\nاگر جواب کلی بود یک follow-up مفید بپرس.\nوقتی اطلاعات کافی شد، یک یادداشت روزانه ساخت‌یافته پیشنهاد بده.\nزبان پاسخ: اگر کاربر فارسی نوشت فارسی، وگرنه به زبان خودش.`;
   }
 
   if (mode === "lesson") {
-    return `${base}
-
-حالت درس کوتاه:
-ساختار ثابت:
-1) عنوان یک خطی
-2) ایده اصلی در دو جمله
-3) سه بخش کوتاه با زیرعنوان
-4) یک مثال ملموس
-5) یک سؤال پایانی برای فکر کردن
-به زبان کاربر جواب بده.`;
+    return `${base}\n\nحالت درس کوتاه:\nساختار ثابت:\n1) عنوان یک خطی\n2) ایده اصلی در دو جمله\n3) سه بخش کوتاه با زیرعنوان\n4) یک مثال ملموس\n5) یک سؤال پایانی برای فکر کردن\nبه زبان کاربر جواب بده.`;
   }
 
-  return `${base}
-
-حالت گفتگو:
-به زبان کاربر جواب بده. اگر فارسی نوشت، فارسی روان بنویس.
-اگر سؤال باز است، یک پاسخ کامل بده و در آخر یک سؤال کوتاه بپرس.`;
+  return `${base}\n\nحالت گفتگو:\nبه زبان کاربر جواب بده. اگر فارسی نوشت، فارسی روان بنویس.\nاگر سؤال باز است، یک پاسخ کامل بده و در آخر یک سؤال کوتاه بپرس.`;
 }
 
 async function readError(res: Response): Promise<string> {
@@ -373,17 +327,7 @@ export const makeQuiz = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       const result = await chatComplete(
-        `تو طراح آزمون آموزشی هستی. فقط JSON معتبر برگردان، بدون markdown و بدون توضیح اضافه.
-شکل دقیق:
-{"topic":"string","questions":[{"q":"string","options":["a","b","c","d"],"correct":0,"why":"string"}]}
-قوانین:
-- دقیقاً ۵ سؤال چهارگزینه‌ای
-- correct ایندکس ۰ تا ۳ است
-- گزینه‌ها کوتاه و متمایز
-- why یک توضیح ۲ تا ۳ جمله‌ای درست و آموزنده
-- زبان فارسی روان
-- ${levelLine(data.level)}
-- واقعیت ساختگی نساز`,
+        `تو طراح آزمون آموزشی هستی. فقط JSON معتبر برگردان، بدون markdown و بدون توضیح اضافه.\nشکل دقیق:\n{"topic":"string","questions":[{"q":"string","options":["a","b","c","d"],"correct":0,"why":"string"]}\nقوانین:\n- دقیقاً ۵ سؤال چهارگزینه‌ای\n- correct ایندکس ۰ تا ۳ است\n- گزینه‌ها کوتاه و متمایز\n- why یک توضیح ۲ تا ۳ جمله‌ای درست و آموزنده\n- زبان فارسی روان\n- ${levelLine(data.level)}\n- واقعیت ساختگی نساز`,
         [{ role: "user", content: `آزمون اطلاعات عمومی / آموزشی درباره: ${data.topic}` }],
         2500,
         () => "",
@@ -421,9 +365,7 @@ export const dailyFact = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       return await chatComplete(
-        `تو پویا هستی. یک «دانستی امروز» کوتاه، زنده و دقیق بنویس.
-ساختار: عنوان یک خطی، بعد ۳ تا ۵ جمله، بعد یک جمله «چرا مهم است».
-فارسی روان. بدون ایموجی. ${levelLine(data.level)} واقعیت ساختگی نساز.`,
+        `تو پویا هستی. یک «دانستی امروز» کوتاه، زنده و دقیق بنویس.\nساختار: عنوان یک خطی، بعد ۳ تا ۵ جمله، بعد یک جمله «چرا مهم است».\nفارسی روان. بدون ایموجی. ${levelLine(data.level)} واقعیت ساختگی نساز.`,
         [{ role: "user", content: "دانستی امروز را بگو؛ موضوع را خودت انتخاب کن، غافلگیرکننده باشد." }],
         1024,
         () => todayFact(),
@@ -457,6 +399,38 @@ export const speakPouya = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 900);
+
+      // 1) Liara / OpenAI-compatible TTS first (kind male voice: echo)
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (openaiKey) {
+        const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+        // Liara model ids are prefixed (openai/tts-1). Plain openai.com accepts tts-1.
+        const isLiara = /ai\.liara\.ir/i.test(base);
+        const model =
+          process.env.OPENAI_TTS_MODEL ||
+          (isLiara ? "openai/tts-1" : "tts-1");
+        // echo = warm male; onyx = deep male. Default echo for مهربون.
+        const voice = process.env.OPENAI_TTS_VOICE || "echo";
+        const res = await fetch(`${base}/audio/speech`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
+          body: JSON.stringify({
+            model,
+            voice,
+            input: text,
+            response_format: "mp3",
+            speed: 0.98,
+          }),
+        });
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          console.info("[pouya-tts] openai/liara ok", model, voice);
+          return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+        }
+        console.error("[pouya-tts] openai/liara fail", res.status, await readError(res));
+      }
+
+      // 2) xAI fallback if key has credit
       const xaiKey = process.env.XAI_API_KEY;
       if (xaiKey) {
         const res = await fetch("https://api.x.ai/v1/tts", {
@@ -475,25 +449,10 @@ export const speakPouya = createServerFn({ method: "POST" })
           return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
         }
       }
-      const openaiKey = process.env.OPENAI_API_KEY;
-      if (openaiKey) {
-        const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-        const res = await fetch(`${base}/audio/speech`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
-          body: JSON.stringify({
-            model: process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts",
-            voice: process.env.OPENAI_TTS_VOICE || "onyx",
-            input: text,
-          }),
-        });
-        if (res.ok) {
-          const buf = Buffer.from(await res.arrayBuffer());
-          return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
-        }
-      }
+
       return { ok: false as const, error: "unavailable" };
-    } catch {
+    } catch (err) {
+      console.error("[pouya-tts] throw", err);
       return { ok: false as const, error: "unavailable" };
     }
   });
