@@ -66,7 +66,6 @@ function spokenSlice(text: string) {
     .replace(/\*\*/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  // Keep enough text for full TTS (was 360 → mid-sentence cuts)
   if (clean.length <= 900) return clean;
   const cut = clean.slice(0, 900);
   const mark = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("؟"), cut.lastIndexOf("!"), cut.lastIndexOf("?"));
@@ -122,12 +121,15 @@ export function PouyaMainApp() {
       setMood("idle");
       if (voiceCallRef.current) setVoicePhase(callMutedRef.current ? "idle" : "listen");
     };
+    // Persian text → fa-IR (prevents English female browser voice)
+    const hasFa = /[\u0600-\u06FF]/.test(spoken);
+    const speakLang = hasFa ? "fa-IR" : langById(lang).locale;
     try {
-      const res = await speakPouya({ data: { text: spoken, lang: langById(lang).locale } });
-      if (res.ok) {
+      const res = await speakPouya({ data: { text: spoken, lang: speakLang } });
+      if (res && typeof res === "object" && "ok" in res && res.ok && "audio" in res && res.audio) {
         audioRef.current?.pause();
         window.speechSynthesis?.cancel();
-        const url = `data:${res.mime};base64,${res.audio}`;
+        const url = `data:${(res as { mime?: string }).mime || "audio/mpeg"};base64,${res.audio}`;
         const audio = new Audio(url);
         audioRef.current = audio;
         voiceActiveRef.current = true;
@@ -146,17 +148,18 @@ export function PouyaMainApp() {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(spoken);
-    utter.lang = langById(lang).locale;
-    utter.rate = 0.96;
-    utter.pitch = 0.92;
+    utter.lang = speakLang;
+    utter.rate = 0.95;
+    utter.pitch = 0.9;
     const voices = window.speechSynthesis.getVoices();
-    const locale = langById(lang).locale;
-    const pool = voices.filter((v) => v.lang.toLowerCase().startsWith(locale.slice(0, 2).toLowerCase()));
-    const male =
-      pool.find((v) => /male|mohammad|farid|davood|reza|hossein|nasser|dariush|onyx|echo/i.test(v.name)) ||
-      pool.find((v) => !/female|woman|girl|sara|nazanin|alloy|nova|shimmer/i.test(v.name)) ||
+    const lang2 = speakLang.slice(0, 2).toLowerCase();
+    const pool = voices.filter((v) => v.lang.toLowerCase().startsWith(lang2));
+    const prefer =
+      pool.find((v) => /male|mohammad|farid|davood|reza|hossein|nasser|dariush|hamid/i.test(v.name)) ||
+      pool.find((v) => !/female|woman|girl|sara|nazanin|zira|samantha|victoria/i.test(v.name)) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith("fa")) ||
       pool[0];
-    if (male) utter.voice = male;
+    if (prefer) utter.voice = prefer;
     await new Promise<void>((resolve) => {
       utter.onend = () => { finish(); resolve(); };
       utter.onerror = () => { finish(); resolve(); };
@@ -327,13 +330,7 @@ export function PouyaMainApp() {
     voiceActiveRef.current = false;
     try {
       const res = await askPouya({
-        data: {
-          messages: history.slice(-12),
-          level,
-          mode: "live",
-          lang,
-          assistantId,
-        },
+        data: { messages: history.slice(-12), level, mode: "live", lang, assistantId },
       });
       const reply =
         res && typeof res === "object" && "ok" in res && res.ok && "text" in res && typeof res.text === "string"
@@ -415,7 +412,6 @@ export function PouyaMainApp() {
     void send(prompt, "live", lang);
   }
 
-  /** Open language practice tab (works on phone + desktop) */
   function openLivePractice() {
     setMode("live");
     setTab("live");
@@ -437,12 +433,7 @@ export function PouyaMainApp() {
         aria-label="ورود به پویا"
       >
         <div className="relative aspect-[9/16] h-[min(100dvh,100svh)] w-auto max-w-[100vw] overflow-hidden bg-stage sm:h-auto sm:max-h-[min(100dvh,920px)] sm:w-full sm:max-w-[min(100vw,calc(100dvh*9/16))]">
-          <PouyaStage
-            mood="intro"
-            caption={"سلام من پویا هستم\nمربی زنده دانش و زبان"}
-            immersive
-            showCaption
-          />
+          <PouyaStage mood="intro" caption={"سلام من پویا هستم\nمربی زنده دانش و زبان"} immersive showCaption />
           <p className="pointer-events-none absolute inset-x-0 bottom-[6%] text-center text-xs text-cream/80 drop-shadow">
             برای ادامه لمس کن
           </p>
@@ -467,13 +458,7 @@ export function PouyaMainApp() {
             : "border-b border-border bg-card/80 backdrop-blur-md",
         )}
       >
-        <nav
-          className={cn(
-            "pouya-glass-nav w-full min-w-0",
-            redShell && "pouya-glass-nav-on-red",
-          )}
-          aria-label="بخش‌ها"
-        >
+        <nav className={cn("pouya-glass-nav w-full min-w-0", redShell && "pouya-glass-nav-on-red")} aria-label="بخش‌ها">
           {(
             [
               ["chat", "گفتگو", MessageCircle],
@@ -547,19 +532,15 @@ export function PouyaMainApp() {
             setVoiceOn={setVoiceOn}
             mode={mode}
             listening={listening}
-            scrollerRef={scrollerRef}
-            onSend={(t) => void send(t)}
-            onLesson={(t) => void send(t, "lesson")}
-            onDaily={() => void send("مرور روزانه را شروع کن. از من سؤال بپرس.", "daily")}
-            onFact={() => void send("یک دانستی امروز غافلگیرکننده برایم بگو.", "chat")}
-            onLivePractice={openLivePractice}
+            onSend={(t) => void send(t, "chat")}
             onMic={() => toggleMic("chat")}
-            onVoiceCall={() => void openVoiceCall()}
-            onNew={newChat}
-            onSave={() => saveLast()}
+            onNewChat={newChat}
+            onSave={() => saveLast("knowledge")}
+            onOpenVoice={openVoiceCall}
+            scrollerRef={scrollerRef}
+            setTypingFocus={setTypingFocus}
           />
         ) : null}
-
         {tab === "live" ? (
           <LivePane
             messages={messages}
@@ -567,33 +548,25 @@ export function PouyaMainApp() {
             busy={busy}
             draft={draft}
             setDraft={setDraft}
-            level={level}
-            setLevel={setLevel}
-            voiceOn={voiceOn}
-            setVoiceOn={setVoiceOn}
             lang={lang}
             setLang={setLang}
             listening={listening}
-            scrollerRef={scrollerRef}
             onSend={(t) => void send(t, "live")}
-            onScenario={startScenario}
             onMic={() => toggleMic("live")}
-            onNew={newChat}
-            onSave={() => saveLast()}
+            onNewChat={newChat}
+            onScenario={startScenario}
+            scrollerRef={scrollerRef}
           />
         ) : null}
-
-        {tab === "quiz" ? <QuizPane level={level} setMood={setMood} /> : null}
+        {tab === "quiz" ? <QuizPane level={level} /> : null}
         {tab === "vault" ? <VaultPane /> : null}
         {tab === "coaches" ? (
           <CoachesPane
-            activeId={assistantId}
-            onSelect={(a: Assistant) => setAssistantId(a.id)}
-            onStart={(a: Assistant) => {
+            onPick={(a: Assistant) => {
               setAssistantId(a.id);
               setTab("chat");
               setMode("chat");
-              void send(a.starter, "lesson");
+              void send(`سلام، می‌خوام با مربی ${a.name} کار کنم. شروع کنیم.`, "chat");
             }}
           />
         ) : null}
@@ -606,7 +579,6 @@ export function PouyaMainApp() {
           muted={callMuted}
           onClose={closeVoiceCall}
           onToggleMute={toggleCallMute}
-          onSendText={(t) => void sendVoice(t)}
         />
       ) : null}
     </div>
