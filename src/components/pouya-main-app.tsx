@@ -66,7 +66,7 @@ function spokenSlice(text: string) {
 export function PouyaMainApp() {
   const [tab, setTab] = useState<Tab>("chat");
   const [level, setLevel] = useState<Level>("teen");
-  const [voiceOn, setVoiceOn] = useState(true);
+  const [voiceOn, setVoiceOn] = useState(false); // پیش‌فرض خاموش — فقط در تب گفتگو با روشن کردن بلندگو
   const [mood, setMood] = useState<StageMood>("idle");
   const [mode, setMode] = useState<ChatMode>("chat");
   const [lang, setLang] = useState<LangCode>("en");
@@ -102,8 +102,13 @@ export function PouyaMainApp() {
     messagesRef.current = messages;
   }, [messages]);
 
+  // صدا فقط در تب گفتگو (اگر بلندگو روشن باشد) یا در گفتگوی صوتی عمدی
   async function playVoice(text: string) {
-    if (!voiceOn && !voiceCallRef.current) return;
+    const inVoiceCall = voiceCallRef.current;
+    if (!inVoiceCall) {
+      if (!voiceOn) return;
+      if (tab !== "chat") return; // زبان / آزمون / مربی / ... بدون TTS
+    }
     const spoken = spokenSlice(text);
     const finish = () => {
       voiceActiveRef.current = false;
@@ -198,14 +203,14 @@ export function PouyaMainApp() {
           ? res.text
           : localTutorReply({ messages: history.slice(-12), mode: nextMode, lang: useLang });
       setMood("talk");
-      void playVoice(reply);
+      if (nextMode !== "live") void playVoice(reply);
       setMessages([...history, { role: "assistant", content: reply }]);
       setTyped("");
       if (!voiceActiveRef.current) setMood("idle");
     } catch {
       const reply = localTutorReply({ messages: history.slice(-12), mode: nextMode, lang: useLang });
       setMood("talk");
-      void playVoice(reply);
+      if (nextMode !== "live") void playVoice(reply);
       setMessages([...history, { role: "assistant", content: reply }]);
       setTyped("");
       if (!voiceActiveRef.current) setMood("idle");
@@ -401,7 +406,22 @@ export function PouyaMainApp() {
       <header className={cn("flex w-full shrink-0 flex-col gap-2 px-3 pt-[max(0.55rem,env(safe-area-inset-top))] pb-2 sm:px-4", redShell ? "border-b border-white/10 bg-stage-deep/30 backdrop-blur-md" : "border-b border-border bg-card/80 backdrop-blur-md")}>
         <nav className={cn("pouya-glass-nav w-full min-w-0", redShell && "pouya-glass-nav-on-red")} aria-label="بخش‌ها">
           {([["chat", "گفتگو", MessageCircle], ["live", "زبان", Languages], ["coaches", "مربی‌ها", BookOpen], ["quiz", "آزمون", GraduationCap], ["vault", "مغز دوم", Brain], ["account", "حساب", Bookmark]] as const).map(([id, label, Icon]) => (
-            <button key={id} type="button" onClick={() => { setTab(id); if (id === "live") setMode("live"); else if (id === "chat") setMode("chat"); }} className={cn("pouya-glass-tab", tab === id && "pouya-glass-tab-active")} title={label}>
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                if (id !== "chat") {
+                  audioRef.current?.pause();
+                  window.speechSynthesis?.cancel();
+                  voiceActiveRef.current = false;
+                }
+                setTab(id);
+                if (id === "live") setMode("live");
+                else if (id === "chat") setMode("chat");
+              }}
+              className={cn("pouya-glass-tab", tab === id && "pouya-glass-tab-active")}
+              title={label}
+            >
               <Icon className="size-4 shrink-0" strokeWidth={tab === id ? 2 : 1.75} />
               <span className="sr-only">{label}</span>
             </button>
