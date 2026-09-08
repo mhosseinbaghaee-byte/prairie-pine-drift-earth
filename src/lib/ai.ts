@@ -368,15 +368,22 @@ export const speakPouya = createServerFn({ method: "POST" })
       const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 900);
       if (!text) return { ok: false as const, error: "empty" };
 
-      const openaiKey = process.env.OPENAI_API_KEY;
+      // Prefer dedicated TTS key (Liara may issue per-model keys); fall back to chat key.
+      const openaiKey = process.env.OPENAI_TTS_KEY || process.env.OPENAI_API_KEY;
       if (openaiKey) {
-        const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+        const base = (
+          process.env.OPENAI_TTS_BASE_URL ||
+          process.env.OPENAI_BASE_URL ||
+          "https://api.openai.com/v1"
+        ).replace(/\/$/, "");
         const isLiara = /ai\.liara\.ir/i.test(base);
         const models = [
           process.env.OPENAI_TTS_MODEL,
           isLiara ? "openai/tts-1" : "tts-1",
           "openai/tts-1",
           "tts-1",
+          "openai/tts-1-hd",
+          "tts-1-hd",
         ].filter((m, i, arr): m is string => Boolean(m) && arr.indexOf(m) === i);
         const voices = [process.env.OPENAI_TTS_VOICE || "echo", "onyx", "alloy"];
 
