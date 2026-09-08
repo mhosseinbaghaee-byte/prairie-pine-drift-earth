@@ -468,10 +468,7 @@ export function PouyaMainApp() {
             : "border-b border-border bg-card/80 backdrop-blur-md",
         )}
       >
-        <nav
-          className={cn("pouya-glass-nav w-full min-w-0", redShell && "pouya-glass-nav-on-red")}
-          aria-label="بخش‌ها"
-        >
+        <nav className={cn("pouya-glass-nav w-full min-w-0", redShell && "pouya-glass-nav-on-red")} aria-label="بخش‌ها">
           {(
             [
               ["chat", "گفتگو", MessageCircle],
