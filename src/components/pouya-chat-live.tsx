@@ -1,5 +1,5 @@
 import { type RefObject, useRef, useState } from "react";
-import { Bookmark, BookOpen, Languages, Mic, Plus, Send, X } from "lucide-react";
+import { Bookmark, BookOpen, History, Languages, Mic, Plus, Send, Trash2, X } from "lucide-react";
 import {
   LANGUAGES,
   SCENARIOS,
@@ -35,17 +35,85 @@ function Bubble({ role, text, image, live }: { role: "user" | "assistant"; text:
   );
 }
 
-function ActionBar({ onNew, onSave, canSave }: { onNew: () => void; onSave: () => void; canSave: boolean }) {
+function ActionBar({
+  onNew,
+  onSave,
+  canSave,
+  onHistory,
+}: {
+  onNew: () => void;
+  onSave: () => void;
+  canSave: boolean;
+  onHistory?: () => void;
+}) {
   return (
-    <div className="flex items-center px-3 py-2 sm:px-4">
+    <div className="flex items-center gap-1 px-3 py-2 sm:px-4">
       <Button type="button" variant="ghost" size="sm" onClick={onSave} disabled={!canSave} className="gap-1 text-cream/90 hover:bg-white/15 hover:text-cream">
         <Bookmark className="size-4" />
         ذخیره
       </Button>
+      {onHistory ? (
+        <Button type="button" variant="ghost" size="sm" onClick={onHistory} className="gap-1 text-cream/90 hover:bg-white/15 hover:text-cream" aria-label="تاریخچه گفتگو">
+          <History className="size-4" />
+          تاریخچه
+        </Button>
+      ) : null}
       <div className="min-w-0 flex-1" />
       <Button type="button" variant="ghost" size="sm" onClick={onNew} className="text-cream/90 hover:bg-white/15 hover:text-cream">
         گفتگوی تازه
       </Button>
+    </div>
+  );
+}
+
+export type HistoryItem = { id: string; title: string; when: string };
+
+function HistorySheet({
+  open,
+  items,
+  activeId,
+  onClose,
+  onOpen,
+  onDelete,
+}: {
+  open: boolean;
+  items: HistoryItem[];
+  activeId?: string;
+  onClose: () => void;
+  onOpen: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 p-3 sm:items-center" role="dialog" aria-modal="true" aria-label="تاریخچه گفتگو">
+      <div className="flex max-h-[75dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/20 bg-stage-deep text-cream shadow-xl">
+        <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+          <History className="size-4 opacity-80" />
+          <p className="flex-1 text-sm font-medium">تاریخچه گفتگو</p>
+          <button type="button" className="rounded-full p-2 hover:bg-white/10" onClick={onClose} aria-label="بستن">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          {items.length === 0 ? (
+            <p className="px-3 py-8 text-center text-sm text-cream/60">هنوز گفتگویی ذخیره نشده.</p>
+          ) : (
+            <ul className="space-y-1">
+              {items.map((it) => (
+                <li key={it.id} className={cn("flex items-stretch gap-1 rounded-xl", activeId === it.id && "bg-white/10")}>
+                  <button type="button" className="min-w-0 flex-1 rounded-xl px-3 py-2.5 text-start hover:bg-white/10" onClick={() => onOpen(it.id)}>
+                    <p className="truncate text-sm font-medium">{it.title}</p>
+                    <p className="mt-0.5 text-xs text-cream/55">{it.when}</p>
+                  </button>
+                  <button type="button" className="shrink-0 rounded-xl px-3 text-cream/50 hover:bg-white/10 hover:text-cream" aria-label="حذف" onClick={() => onDelete(it.id)}>
+                    <Trash2 className="size-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -56,6 +124,7 @@ const chipClass =
 export function ChatPane({
   messages, typed, busy, draft, setDraft, level, setLevel, voiceOn, setVoiceOn, mode, listening,
   scrollerRef, onSend, onLesson, onDaily, onFact, onMic, onLivePractice, onNew, onSave, onTypingFocus, onVoiceCall,
+  historyItems, historyOpen, setHistoryOpen, activeSessionId, onOpenHistoryItem, onDeleteHistoryItem,
 }: {
   messages: ChatMsg[]; typed: string; busy: boolean; draft: string; setDraft: (v: string) => void;
   level: Level; setLevel: (v: Level) => void; voiceOn: boolean; setVoiceOn: (v: boolean) => void;
@@ -64,6 +133,12 @@ export function ChatPane({
   onMic: () => void; onLivePractice: () => void; onNew: () => void; onSave: () => void;
   onTypingFocus?: (focused: boolean) => void;
   onVoiceCall?: () => void;
+  historyItems?: HistoryItem[];
+  historyOpen?: boolean;
+  setHistoryOpen?: (v: boolean) => void;
+  activeSessionId?: string;
+  onOpenHistoryItem?: (id: string) => void;
+  onDeleteHistoryItem?: (id: string) => void;
 }) {
   const empty = messages.length === 0 && !typed;
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -100,7 +175,20 @@ export function ChatPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ActionBar onNew={onNew} onSave={onSave} canSave={messages.some((m) => m.role === "assistant")} />
+      <ActionBar
+        onNew={onNew}
+        onSave={onSave}
+        canSave={messages.some((m) => m.role === "assistant")}
+        onHistory={setHistoryOpen ? () => setHistoryOpen(true) : undefined}
+      />
+      <HistorySheet
+        open={Boolean(historyOpen)}
+        items={historyItems || []}
+        activeId={activeSessionId}
+        onClose={() => setHistoryOpen?.(false)}
+        onOpen={(id) => { onOpenHistoryItem?.(id); setHistoryOpen?.(false); }}
+        onDelete={(id) => onDeleteHistoryItem?.(id)}
+      />
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5">
         {empty ? (
           <div className="mx-auto flex w-full max-w-xl min-w-0 flex-col gap-5 pt-4 text-center">
