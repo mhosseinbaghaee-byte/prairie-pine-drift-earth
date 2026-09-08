@@ -45,6 +45,7 @@ function ActionBar({
   return (
     <div className="flex items-center px-3 py-2 sm:px-4">
       <Button
+        type="button"
         variant="ghost"
         size="sm"
         onClick={onSave}
@@ -55,12 +56,21 @@ function ActionBar({
         ذخیره
       </Button>
       <div className="min-w-0 flex-1" />
-      <Button variant="ghost" size="sm" onClick={onNew} className="text-cream/90 hover:bg-white/15 hover:text-cream">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onNew}
+        className="text-cream/90 hover:bg-white/15 hover:text-cream"
+      >
         گفتگوی تازه
       </Button>
     </div>
   );
 }
+
+const chipClass =
+  "inline-flex h-11 min-h-11 items-center justify-center gap-1.5 rounded-full border border-white/30 bg-white/15 px-3.5 text-sm text-cream backdrop-blur-md touch-manipulation select-none hover:bg-white/25 active:scale-[0.98]";
 
 export function ChatPane({
   messages, typed, busy, draft, setDraft, level, setLevel, voiceOn, setVoiceOn, mode, listening,
@@ -92,22 +102,55 @@ export function ChatPane({
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               {TOPICS.map((t) => (
-                <button key={t.id} type="button" onClick={() => onLesson(t.prompt)}
-                  className="h-10 rounded-full border border-white/30 bg-white/15 px-3.5 text-sm text-cream backdrop-blur-md hover:bg-white/25">
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onLesson(t.prompt)}
+                  className={chipClass}
+                >
                   {t.label}
                 </button>
               ))}
             </div>
             <div className="flex flex-wrap justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onLivePractice} className="border-white/30 bg-white/10 text-cream hover:bg-white/20 hover:text-cream">
-                <Languages className="size-4" /> تمرین زبان
-              </Button>
-              <Button variant="outline" size="sm" onClick={onDaily} className="border-white/30 bg-white/10 text-cream hover:bg-white/20 hover:text-cream">
-                <BookOpen className="size-4" /> مرور روزانه
-              </Button>
-              <Button variant="outline" size="sm" onClick={onFact} className="border-white/30 bg-white/10 text-cream hover:bg-white/20 hover:text-cream">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onLivePractice();
+                }}
+                className={chipClass}
+                aria-label="تمرین زبان"
+              >
+                <Languages className="size-4 shrink-0" />
+                تمرین زبان
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDaily();
+                }}
+                className={chipClass}
+                aria-label="مرور روزانه"
+              >
+                <BookOpen className="size-4 shrink-0" />
+                مرور روزانه
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onFact();
+                }}
+                className={chipClass}
+                aria-label="دانستی امروز"
+              >
                 دانستی امروز
-              </Button>
+              </button>
             </div>
           </div>
         ) : (
@@ -211,16 +254,31 @@ export function LivePane({
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               {LANGUAGES.map((l) => (
-                <button key={l.code} type="button" onClick={() => setLang(l.code)}
-                  className={cn("h-10 rounded-full border px-3.5 text-sm backdrop-blur-md", lang === l.code ? "border-white bg-white text-ink" : "border-white/30 bg-white/15 text-cream")}>
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => setLang(l.code)}
+                  className={cn(
+                    "h-11 min-h-11 rounded-full border px-3.5 text-sm backdrop-blur-md touch-manipulation",
+                    lang === l.code
+                      ? "border-white bg-white text-ink"
+                      : "border-white/30 bg-white/15 text-cream",
+                  )}
+                >
                   <span className="me-1.5">{l.flag}</span>{l.label}
                 </button>
               ))}
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               {SCENARIOS.map((s) => (
-                <button key={s.id} type="button" onClick={() => onScenario(s.prompt)}
-                  className="h-10 rounded-full border border-white/30 bg-white/15 px-3.5 text-sm text-cream backdrop-blur-md hover:bg-white/25">{s.label}</button>
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onScenario(s.prompt)}
+                  className={chipClass}
+                >
+                  {s.label}
+                </button>
               ))}
             </div>
           </div>
