@@ -415,6 +415,12 @@ export function PouyaMainApp() {
     void send(prompt, "live", lang);
   }
 
+  /** Open language practice tab (works on phone + desktop) */
+  function openLivePractice() {
+    setMode("live");
+    setTab("live");
+  }
+
   const redShell = tab === "chat" || tab === "live";
 
   function finishIntro() {
@@ -546,6 +552,7 @@ export function PouyaMainApp() {
             onLesson={(t) => void send(t, "lesson")}
             onDaily={() => void send("مرور روزانه را شروع کن. از من سؤال بپرس.", "daily")}
             onFact={() => void send("یک دانستی امروز غافلگیرکننده برایم بگو.", "chat")}
+            onLivePractice={openLivePractice}
             onMic={() => toggleMic("chat")}
             onVoiceCall={() => void openVoiceCall()}
             onNew={newChat}
