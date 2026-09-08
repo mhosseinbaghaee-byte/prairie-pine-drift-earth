@@ -332,21 +332,20 @@ export function PouyaMainApp() {
         data: {
           messages: history.slice(-12),
           level,
-          mode: "live",
-          lang,
+          mode: "chat",
           assistantId,
         },
       });
       const reply =
         res && typeof res === "object" && "ok" in res && res.ok && "text" in res && typeof res.text === "string"
           ? res.text
-          : localTutorReply({ messages: history.slice(-12), mode: "live", lang });
+          : localTutorReply({ messages: history.slice(-12), mode: "chat" });
       setMessages([...history, { role: "assistant", content: reply }]);
       setMood("talk");
       setVoicePhase("talk");
       await playVoice(reply);
     } catch {
-      const reply = localTutorReply({ messages: history.slice(-12), mode: "live", lang });
+      const reply = localTutorReply({ messages: history.slice(-12), mode: "chat" });
       setMessages([...history, { role: "assistant", content: reply }]);
       await playVoice(reply);
     } finally {
