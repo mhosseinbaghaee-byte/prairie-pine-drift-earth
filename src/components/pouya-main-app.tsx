@@ -121,7 +121,6 @@ export function PouyaMainApp() {
       setMood("idle");
       if (voiceCallRef.current) setVoicePhase(callMutedRef.current ? "idle" : "listen");
     };
-    // Persian text → fa-IR (prevents English female browser voice)
     const hasFa = /[\u0600-\u06FF]/.test(spoken);
     const speakLang = hasFa ? "fa-IR" : langById(lang).locale;
     try {
@@ -330,7 +329,13 @@ export function PouyaMainApp() {
     voiceActiveRef.current = false;
     try {
       const res = await askPouya({
-        data: { messages: history.slice(-12), level, mode: "live", lang, assistantId },
+        data: {
+          messages: history.slice(-12),
+          level,
+          mode: "live",
+          lang,
+          assistantId,
+        },
       });
       const reply =
         res && typeof res === "object" && "ok" in res && res.ok && "text" in res && typeof res.text === "string"
@@ -433,7 +438,12 @@ export function PouyaMainApp() {
         aria-label="ورود به پویا"
       >
         <div className="relative aspect-[9/16] h-[min(100dvh,100svh)] w-auto max-w-[100vw] overflow-hidden bg-stage sm:h-auto sm:max-h-[min(100dvh,920px)] sm:w-full sm:max-w-[min(100vw,calc(100dvh*9/16))]">
-          <PouyaStage mood="intro" caption={"سلام من پویا هستم\nمربی زنده دانش و زبان"} immersive showCaption />
+          <PouyaStage
+            mood="intro"
+            caption={"سلام من پویا هستم\nمربی زنده دانش و زبان"}
+            immersive
+            showCaption
+          />
           <p className="pointer-events-none absolute inset-x-0 bottom-[6%] text-center text-xs text-cream/80 drop-shadow">
             برای ادامه لمس کن
           </p>
@@ -458,7 +468,13 @@ export function PouyaMainApp() {
             : "border-b border-border bg-card/80 backdrop-blur-md",
         )}
       >
-        <nav className={cn("pouya-glass-nav w-full min-w-0", redShell && "pouya-glass-nav-on-red")} aria-label="بخش‌ها">
+        <nav
+          className={cn(
+            "pouya-glass-nav w-full min-w-0",
+            redShell && "pouya-glass-nav-on-red",
+          )}
+          aria-label="بخش‌ها"
+        >
           {(
             [
               ["chat", "گفتگو", MessageCircle],
@@ -532,15 +548,19 @@ export function PouyaMainApp() {
             setVoiceOn={setVoiceOn}
             mode={mode}
             listening={listening}
-            onSend={(t) => void send(t, "chat")}
-            onMic={() => toggleMic("chat")}
-            onNewChat={newChat}
-            onSave={() => saveLast("knowledge")}
-            onOpenVoice={openVoiceCall}
             scrollerRef={scrollerRef}
-            setTypingFocus={setTypingFocus}
+            onSend={(t) => void send(t)}
+            onLesson={(t) => void send(t, "lesson")}
+            onDaily={() => void send("مرور روزانه را شروع کن. از من سؤال بپرس.", "daily")}
+            onFact={() => void send("یک دانستی امروز غافلگیرکننده برایم بگو.", "chat")}
+            onLivePractice={openLivePractice}
+            onMic={() => toggleMic("chat")}
+            onVoiceCall={() => void openVoiceCall()}
+            onNew={newChat}
+            onSave={() => saveLast()}
           />
         ) : null}
+
         {tab === "live" ? (
           <LivePane
             messages={messages}
@@ -548,25 +568,32 @@ export function PouyaMainApp() {
             busy={busy}
             draft={draft}
             setDraft={setDraft}
+            level={level}
+            setLevel={setLevel}
+            voiceOn={voiceOn}
+            setVoiceOn={setVoiceOn}
             lang={lang}
             setLang={setLang}
             listening={listening}
-            onSend={(t) => void send(t, "live")}
-            onMic={() => toggleMic("live")}
-            onNewChat={newChat}
-            onScenario={startScenario}
             scrollerRef={scrollerRef}
+            onSend={(t) => void send(t, "live")}
+            onScenario={startScenario}
+            onMic={() => toggleMic("live")}
+            onNew={newChat}
+            onSave={() => saveLast()}
           />
         ) : null}
+
         {tab === "quiz" ? <QuizPane level={level} /> : null}
         {tab === "vault" ? <VaultPane /> : null}
         {tab === "coaches" ? (
           <CoachesPane
-            onPick={(a: Assistant) => {
+            selectedId={assistantId}
+            onSelect={(a: Assistant) => {
               setAssistantId(a.id);
               setTab("chat");
               setMode("chat");
-              void send(`سلام، می‌خوام با مربی ${a.name} کار کنم. شروع کنیم.`, "chat");
+              toast.success(`مربی ${a.name} انتخاب شد`);
             }}
           />
         ) : null}
