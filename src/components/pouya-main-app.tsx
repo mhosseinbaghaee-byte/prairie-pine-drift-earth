@@ -20,6 +20,14 @@ import {
   type Level,
 } from "@/lib/topics";
 import { saveNote, titleFromBody, type FolderId } from "@/lib/vault";
+import {
+  deleteChatSession,
+  formatSessionDate,
+  getChatSession,
+  listChatSessions,
+  upsertChatSession,
+  type ChatSession,
+} from "@/lib/chat-history";
 import { cn } from "@/lib/utils";
 import { PouyaStage, type StageMood } from "./pouya-stage";
 import { CoachesPane } from "./coaches-pane";
@@ -66,12 +74,15 @@ function spokenSlice(text: string) {
 export function PouyaMainApp() {
   const [tab, setTab] = useState<Tab>("chat");
   const [level, setLevel] = useState<Level>("teen");
-  const [voiceOn, setVoiceOn] = useState(false); // پیش‌فرض خاموش — فقط در تب گفتگو با روشن کردن بلندگو
+  const [voiceOn, setVoiceOn] = useState(false);
   const [mood, setMood] = useState<StageMood>("idle");
   const [mode, setMode] = useState<ChatMode>("chat");
   const [lang, setLang] = useState<LangCode>("en");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const messagesRef = useRef<ChatMsg[]>([]);
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyTick, setHistoryTick] = useState(0);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [typed, setTyped] = useState("");
@@ -102,12 +113,18 @@ export function PouyaMainApp() {
     messagesRef.current = messages;
   }, [messages]);
 
-  // صدا فقط در تب گفتگو (اگر بلندگو روشن باشد) یا در گفتگوی صوتی عمدی
+  useEffect(() => {
+    if (!messages.some((x) => x.role === "assistant")) return;
+    const saved = upsertChatSession({ id: sessionId, messages });
+    if (saved && saved.id !== sessionId) setSessionId(saved.id);
+    setHistoryTick((n) => n + 1);
+  }, [messages, sessionId]);
+
   async function playVoice(text: string) {
     const inVoiceCall = voiceCallRef.current;
     if (!inVoiceCall) {
       if (!voiceOn) return;
-      if (tab !== "chat") return; // زبان / آزمون / مربی / ... بدون TTS
+      if (tab !== "chat") return;
     }
     const spoken = spokenSlice(text);
     const finish = () => {
@@ -225,10 +242,43 @@ export function PouyaMainApp() {
     audioRef.current?.pause();
     voiceActiveRef.current = false;
     setMessages([]);
+    setSessionId(undefined);
     setTyped("");
     setMode(tab === "live" ? "live" : "chat");
     setMood("idle");
   }
+
+  function openHistorySession(id: string) {
+    const s = getChatSession(id);
+    if (!s) return;
+    stopMic();
+    audioRef.current?.pause();
+    setSessionId(s.id);
+    setMessages(s.messages.map((x) => ({ role: x.role, content: x.content })));
+    setTyped("");
+    setTab("chat");
+    setMode("chat");
+    setMood("idle");
+  }
+
+  function removeHistorySession(id: string) {
+    deleteChatSession(id);
+    if (sessionId === id) {
+      setSessionId(undefined);
+      setMessages([]);
+    }
+    setHistoryTick((n) => n + 1);
+  }
+
+  const historyItems = (() => {
+    void historyTick;
+    if (typeof window === "undefined") return [] as { id: string; title: string; when: string }[];
+    return listChatSessions().map((s: ChatSession) => ({
+      id: s.id,
+      title: s.title,
+      when: formatSessionDate(s.updatedAt),
+    }));
+  })();
 
   function stopMic() {
     try { recRef.current?.stop(); } catch { /* ignore */ }
@@ -467,6 +517,12 @@ export function PouyaMainApp() {
             onVoiceCall={() => void openVoiceCall()}
             onNew={newChat}
             onSave={() => saveLast()}
+            historyItems={historyItems}
+            historyOpen={historyOpen}
+            setHistoryOpen={setHistoryOpen}
+            activeSessionId={sessionId}
+            onOpenHistoryItem={openHistorySession}
+            onDeleteHistoryItem={removeHistorySession}
           />
         ) : null}
         {tab === "live" ? (
