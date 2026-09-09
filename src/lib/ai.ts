@@ -48,37 +48,35 @@ function levelLine(level: Level) {
 }
 
 function textbookStyleRules(level: Level) {
-  if (level === "adult") {
-    return (
-      `- توضیح شفاف بنویس. از LaTeX خام مثل $...$ یا \\frac یا \\cos پرهیز کن؛ ` +
-      `به‌جای آن از نماد ساده: × ÷ ² ³ √ و کلمات فارسی استفاده کن.`
-    );
-  }
+  void level;
   return (
-    `سبک آموزش (اجباری برای سطح ساده و متوسط):\n` +
-    `- مثل کتاب درسی مدرسه ایران توضیح بده: ساده، مرحله‌به‌مرحله، واضح.\n` +
-    `- هرگز LaTeX یا کد فرمول ننویس: نه $ نه \\frac نه \\cos نه \\sin نه \\theta نه \\times نه [ ] با بک‌اسلش.\n` +
-    `- به‌جای cos بنویس «کسینوس»، به‌جای sin «سینوس»، به‌جای tan «تانژانت».\n` +
-    `- کسر را این‌طور بنویس: (صورت) ÷ (مخرج) یا «صورت روی مخرج».\n` +
-    `- ضرب با × یا «ضربدر». توان: «۲ به توان ۲» یا ۲².\n` +
-    `- اعداد ترجیحاً فارسی.\n` +
-    `- مثال درست: کسینوس زاویه = (ضلع مجاور) ÷ (وتر)\n` +
-    `- مثال ممنوع: \\cos(\\theta) = \\frac{a}{b}`
+    `سبک آموزش (کتاب درسی ایران):\n` +
+    `- ساده، مرحله‌به‌مرحله، واضح.\n` +
+    `- مخفف‌های کتاب درسی مجاز و ترجیح داده می‌شوند: sin ، cos ، tan ، cot ، sec ، csc.\n` +
+    `- مثال درست: cos(θ) = (ضلع مجاور) ÷ (وتر)\n` +
+    `- هرگز LaTeX خام ننویس: نه $...$ نه \\frac نه \\cos نه \\theta با بک‌اسلش.\n` +
+    `- کسر را بنویس: (صورت) ÷ (مخرج) یا «صورت / مخرج».\n` +
+    `- ضرب با × . توان: ۲² یا «۲ به توان ۲».\n` +
+    `- مثال ممنوع: \\cos(\\theta)=\\frac{a}{b}`
   );
 }
 
-/** پاک‌سازی LaTeX و نمادهای کدمانند برای نمایش کتاب‌درسی */
+/** فقط علامت‌های LaTeX را پاک کن؛ sin/cos/tan/cot را نگه دار */
 function sanitizeStudentMath(text: string, level: Level): string {
+  void level;
   let t = text;
 
   // کسرها
   t = t.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, "($1) ÷ ($2)");
   t = t.replace(/\\dfrac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, "($1) ÷ ($2)");
 
-  // توابع مثلثاتی و یونانی
-  t = t.replace(/\\cos\b/gi, level === "adult" ? "cos" : "کسینوس");
-  t = t.replace(/\\sin\b/gi, level === "adult" ? "sin" : "سینوس");
-  t = t.replace(/\\tan\b/gi, level === "adult" ? "tan" : "تانژانت");
+  // LaTeX مثلثاتی → مخفف کتاب درسی (بدون بک‌اسلش)
+  t = t.replace(/\\cos\b/gi, "cos");
+  t = t.replace(/\\sin\b/gi, "sin");
+  t = t.replace(/\\tan\b/gi, "tan");
+  t = t.replace(/\\cot\b/gi, "cot");
+  t = t.replace(/\\sec\b/gi, "sec");
+  t = t.replace(/\\csc\b/gi, "csc");
   t = t.replace(/\\theta\b/gi, "θ");
   t = t.replace(/\\pi\b/gi, "π");
   t = t.replace(/\\alpha\b/gi, "α");
@@ -106,10 +104,9 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\\,/g, " ");
   t = t.replace(/\\ /g, " ");
 
-  // هر فرمان باقی‌مانده مثل \something
+  // فرمان‌های باقی‌مانده LaTeX
   t = t.replace(/\\[a-zA-Z]+/g, "");
 
-  // براکت‌های خالی/اضافی رایج بعد از LaTeX
   t = t.replace(/\{\s*\}/g, "");
   t = t.replace(/[ \t]*\n/g, "\n");
   t = t.replace(/\n{3,}/g, "\n\n");
@@ -118,13 +115,6 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/(\d+)\^2/g, "$1²");
   t = t.replace(/(\d+)\^3/g, "$1³");
   t = t.replace(/\btimes\b/gi, "×");
-
-  // برای سطح دانش‌آموز: cos( انگلیسی را هم فارسی کن
-  if (level !== "adult") {
-    t = t.replace(/\bcos\s*\(/gi, "کسینوس(");
-    t = t.replace(/\bsin\s*\(/gi, "سینوس(");
-    t = t.replace(/\btan\s*\(/gi, "تانژانت(");
-  }
 
   return t.trim();
 }
@@ -140,7 +130,7 @@ function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId
     `- اگر پرسید «چرخ چیست» درباره چرخ بگو؛ نرو سراغ درس تصادفی.\n` +
     `- اگر درباره خودت/مدل/از کجا بلدی پرسید، صادقانه و کوتاه بگو: دستیار آموزشی این اپ هستی و جواب از مدل AI می‌آید.\n` +
     `- فقط وقتی کاربر صریحاً درس کوتاه یا لیست موضوع خواست، حالت درس کوتاه بگیر.\n` +
-    `- زبان پاسخ = زبان پیام کاربر. اگر فارسی نوشت فقط فارسی.\n` +
+    `- زبان پاسخ = زبان پیام کاربر. اگر فارسی نوشت فقط فارسی (به‌جز مخفف‌های ریاضی مثل sin و cos).\n` +
     `- لحن گرم و کوتاه. ایموجی نگذار.\n` +
     `- برای شکل هندسی از برچسب [shape:rhombus] و مشابه استفاده کن.\n` +
     `- ${textbookStyleRules(level)}` +
