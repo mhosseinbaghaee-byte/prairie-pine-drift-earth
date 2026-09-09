@@ -38,7 +38,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
 type ProviderId = "openai" | "gemini";
 
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 const DEFAULT_ORDER: ProviderId[] = ["openai", "gemini"];
 
 function levelLine(level: Level) {
@@ -79,34 +79,63 @@ function isQuotaStatus(status: number) {
 
 async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.log("[pouya-ai] openai: no OPENAI_API_KEY set, skipping");
+    return null;
+  }
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  let base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  // Defensive: if OPENAI_BASE_URL was set including the endpoint path already, strip it
+  // so we don't end up calling .../chat/completions/chat/completions.
+  base = base.replace(/\/chat\/completions$/, "");
+  const url = `${base}/chat/completions`;
   try {
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    const res = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "system", content: system }, ...history],
-        max_tokens: maxTokens,
-        temperature: 0.7,
-      }),
-    });
-    if (isQuotaStatus(res.status)) return { ok: false, error: `quota:${res.status}` };
-    if (!res.ok) return { ok: false, error: await readError(res) };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "system", content: system }, ...history],
+          max_tokens: maxTokens,
+          temperature: 0.7,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (isQuotaStatus(res.status)) {
+      console.error(`[pouya-ai] openai quota/auth error: status=${res.status} url=${url} model=${model}`);
+      return { ok: false, error: `quota:${res.status}` };
+    }
+    if (!res.ok) {
+      const msg = await readError(res);
+      console.error(`[pouya-ai] openai http error: status=${res.status} url=${url} model=${model} msg=${msg}`);
+      return { ok: false, error: msg };
+    }
     const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const text = body.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!text) console.error(`[pouya-ai] openai empty response: url=${url} model=${model}`);
     return text ? { ok: true, text, provider: "openai" } : { ok: false, error: "empty" };
-  } catch {
+  } catch (err) {
+    const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.error(`[pouya-ai] openai network error: url=${url} model=${model} reason=${reason}`);
     return { ok: false, error: "network" };
   }
 }
 
 async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
   const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
-  if (!apiKey) return null;
-  for (const model of [process.env.GEMINI_MODEL, ...GEMINI_MODELS].filter(Boolean) as string[]) {
+  if (!apiKey) {
+    console.log("[pouya-ai] gemini: no GEMINI_API_KEY/GOOGLE_API_KEY set, skipping");
+    return null;
+  }
+  const models = [process.env.GEMINI_MODEL, ...GEMINI_MODELS].filter(Boolean) as string[];
+  for (const model of models) {
     try {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
@@ -123,13 +152,21 @@ async function callGemini(system: string, history: ChatMsg[], maxTokens: number)
           }),
         },
       );
-      if (!res.ok) continue;
+      if (!res.ok) {
+        const msg = await readError(res);
+        console.error(`[pouya-ai] gemini http error: model=${model} status=${res.status} msg=${msg}`);
+        continue;
+      }
       const body = (await res.json()) as {
         candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       };
       const text = (body.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? "").join("").trim();
       if (text) return { ok: true, text, provider: "gemini" };
-    } catch {}
+      console.error(`[pouya-ai] gemini empty response: model=${model}`);
+    } catch (err) {
+      const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      console.error(`[pouya-ai] gemini network error: model=${model} reason=${reason}`);
+    }
   }
   return { ok: false, error: "gemini" };
 }
@@ -148,7 +185,9 @@ async function chatComplete(
           ? await callGemini(system, history, maxTokens)
           : null;
     if (result?.ok && result.text) return { ok: true as const, text: result.text, provider: result.provider || id };
+    if (result && !result.ok) console.error(`[pouya-ai] provider "${id}" failed: ${result.error}`);
   }
+  console.error("[pouya-ai] all providers failed -> using local fallback");
   return { ok: true as const, text: fallback(), provider: "local" };
 }
 
@@ -163,7 +202,8 @@ export const askPouya = createServerFn({ method: "POST" })
         short ? 1024 : 2048,
         () => localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
       );
-    } catch {
+    } catch (err) {
+      console.error("[pouya-ai] askPouya threw:", err instanceof Error ? err.message : err);
       return {
         ok: true as const,
         text: localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
