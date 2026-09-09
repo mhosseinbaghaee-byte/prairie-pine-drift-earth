@@ -21,24 +21,30 @@ function Bubble({ role, text, image, live }: { role: "user" | "assistant"; text:
   const mine = role === "user";
   const [copied, setCopied] = useState(false);
 
-  async function copyText() {
+  async function copyText(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     if (!text?.trim()) return;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      window.setTimeout(() => setCopied(false), 1800);
     } catch {
       try {
         const ta = document.createElement("textarea");
         ta.value = text;
+        ta.setAttribute("readonly", "");
         ta.style.position = "fixed";
-        ta.style.left = "-9999px";
+        ta.style.top = "0";
+        ta.style.left = "0";
+        ta.style.opacity = "0";
         document.body.appendChild(ta);
+        ta.focus();
         ta.select();
         document.execCommand("copy");
         document.body.removeChild(ta);
         setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
+        window.setTimeout(() => setCopied(false), 1800);
       } catch {
         /* ignore */
       }
@@ -46,7 +52,7 @@ function Bubble({ role, text, image, live }: { role: "user" | "assistant"; text:
   }
 
   return (
-    <div className={cn("flex max-w-[88%] flex-col gap-0.5", mine ? "ms-auto" : "")}>
+    <div className={cn("flex max-w-[88%] flex-col", mine ? "ms-auto" : "")}>
       <article
         className={cn(
           "rounded-2xl px-4 py-3 text-sm leading-normal shadow-sm",
@@ -65,22 +71,34 @@ function Bubble({ role, text, image, live }: { role: "user" | "assistant"; text:
           />
         ) : null}
         {mine ? <p className="text-pretty">{text}</p> : <RichText text={text} />}
+        {!live ? (
+          <div className="mt-2 flex justify-start" dir="ltr">
+            <button
+              type="button"
+              onClick={copyText}
+              className={cn(
+                "inline-flex h-7 min-w-7 items-center justify-center gap-1 rounded-full px-2 text-[10px] font-medium touch-manipulation",
+                mine
+                  ? "bg-white/15 text-cream/90 hover:bg-white/25"
+                  : "bg-black/5 text-fg-muted hover:bg-black/10 hover:text-ink",
+              )}
+              aria-label={copied ? "کپی شد" : "کپی متن"}
+            >
+              {copied ? (
+                <>
+                  <Check className="size-3.5 shrink-0" strokeWidth={2.5} />
+                  <span>کپی شد</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="size-3.5 shrink-0" strokeWidth={2.25} />
+                  <span>کپی</span>
+                </>
+              )}
+            </button>
+          </div>
+        ) : null}
       </article>
-      {!live ? (
-        <button
-          type="button"
-          onClick={copyText}
-          className={cn(
-            "inline-flex size-5 shrink-0 items-center justify-center rounded-md self-end",
-            "text-cream/45 transition hover:bg-white/10 hover:text-cream/90",
-            mine && "text-cream/50",
-          )}
-          aria-label={copied ? "کپی شد" : "کپی متن"}
-          title={copied ? "کپی شد" : "کپی"}
-        >
-          {copied ? <Check className="size-2.5" strokeWidth={2.5} /> : <Copy className="size-2.5" strokeWidth={2.25} />}
-        </button>
-      ) : null}
     </div>
   );
 }
