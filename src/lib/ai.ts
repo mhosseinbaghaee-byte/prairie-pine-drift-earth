@@ -11,6 +11,8 @@ const MessageSchema = z.object({
 
 const ChatInput = z.object({
   messages: z.array(MessageSchema).min(1).max(16),
+  /** data URL image (e.g. data:image/jpeg;base64,...) for the latest user message */
+  image: z.string().max(6_500_000).optional(),
   level: z.enum(["kid", "teen", "adult"]).catch("teen"),
   mode: z.enum(["chat", "daily", "lesson", "live", "language"]).catch("chat"),
   lang: z.string().min(1).max(16).optional(),
@@ -53,24 +55,26 @@ function textbookStyleRules(level: Level) {
     `سبک آموزش (کتاب درسی ایران):\n` +
     `- ساده، مرحله‌به‌مرحله، واضح.\n` +
     `- مخفف‌های کتاب درسی مجاز: sin ، cos ، tan ، cot ، sec ، csc.\n` +
-    `- کسر را ترجیحاً بالا–پایین بنویس (صورت روی خط، مخرج زیر خط)، مثل کتاب:\n` +
-    `    ضلع مجاور\n` +
-    `  ──────────\n` +
-    `      وتر\n` +
-    `- شکل افقی هم مجاز است: (ضلع مجاور) / (وتر) یا با ÷.\n` +
+    `- کسر را ترجیحاً بالا–پایین بنویس (صورت روی خط، مخرج زیر خط).\n` +
+    `- شکل افقی هم مجاز: (صورت) / (مخرج) یا با ÷.\n` +
     `- هرگز LaTeX خام ننویس: نه $...$ نه \\frac نه \\cos با بک‌اسلش.\n` +
-    `- ضرب با × . توان: ۲² یا «۲ به توان ۲».\n` +
-    `- مثال درست: cos(θ) = ضلع مجاور / وتر\n` +
-    `- مثال ممنوع: \\cos(\\theta)=\\frac{a}{b}`
+    `- ضرب با × . توان: ۲² یا «۲ به توان ۲».`
   );
 }
 
-/** فقط علامت‌های LaTeX را پاک کن؛ sin/cos/tan/cot را نگه دار؛ کسر را بالا–پایین کن */
+function parseDataUrl(dataUrl: string): { mime: string; b64: string } | null {
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl.trim());
+  if (!m) return null;
+  const mime = m[1].toLowerCase();
+  if (!mime.startsWith("image/")) return null;
+  if (m[2].length < 32) return null;
+  return { mime, b64: m[2] };
+}
+
 function sanitizeStudentMath(text: string, level: Level): string {
   void level;
   let t = text;
 
-  // \\frac{a}{b} → نمایش بالا–پایین کتاب درسی
   t = t.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, (_m, a: string, b: string) => {
     const top = String(a).trim();
     const bot = String(b).trim();
@@ -86,7 +90,6 @@ function sanitizeStudentMath(text: string, level: Level): string {
     return `\n  ${top}\n${line}\n  ${bot}\n`;
   });
 
-  // LaTeX مثلثاتی → مخفف کتاب درسی
   t = t.replace(/\\cos\b/gi, "cos");
   t = t.replace(/\\sin\b/gi, "sin");
   t = t.replace(/\\tan\b/gi, "tan");
@@ -98,7 +101,6 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\\alpha\b/gi, "α");
   t = t.replace(/\\beta\b/gi, "β");
 
-  // عملگرها
   t = t.replace(/\\times/gi, "×");
   t = t.replace(/\\div/gi, "÷");
   t = t.replace(/\\cdot/gi, "·");
@@ -111,7 +113,6 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\\text\s*\{([^{}]*)\}/gi, "$1");
   t = t.replace(/\\mathrm\s*\{([^{}]*)\}/gi, "$1");
 
-  // بلوک‌ها و دلار
   t = t.replace(/\$\$/g, "");
   t = t.replace(/\$/g, "");
   t = t.replace(/\\\[|\\\]/g, "");
@@ -119,15 +120,11 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\\left|\\right/gi, "");
   t = t.replace(/\\,/g, " ");
   t = t.replace(/\\ /g, " ");
-
-  // فرمان‌های باقی‌مانده LaTeX
   t = t.replace(/\\[a-zA-Z]+/g, "");
-
   t = t.replace(/\{\s*\}/g, "");
   t = t.replace(/[ \t]*\n/g, "\n");
   t = t.replace(/\n{3,}/g, "\n\n");
   t = t.replace(/[ \t]{2,}/g, " ");
-
   t = t.replace(/(\d+)\^2/g, "$1²");
   t = t.replace(/(\d+)\^3/g, "$1³");
   t = t.replace(/\btimes\b/gi, "×");
@@ -135,21 +132,30 @@ function sanitizeStudentMath(text: string, level: Level): string {
   return t.trim();
 }
 
-function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId?: string) {
+function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId?: string, hasImage?: boolean) {
   const lang = langById(langId || "fa");
   const coach = assistantSystemExtra(assistantId);
+  const vision =
+    hasImage
+      ? `\n- کاربر تصویر فرستاده است. حتماً همان تصویر را توصیف و تحلیل کن: نمودار ریاضی (sin/cos/tan/cot)، شکل هندسی، آناتومی زیست، عکس کتاب/جزوه، جدول یا هر شکل درسی.\n` +
+        `- نگو «فقط شکل هندسی می‌فهمم». هر تصویر آموزشی را تا حد ممکن توضیح بده.\n` +
+        `- اگر نمودار است: نام تابع، محورها، نقاط مهم، مجانب‌ها را بگو.\n` +
+        `- اگر آناتومی/زیست است: نام اعضا و نقش ساده را بگو.\n` +
+        `- اگر متن کتاب در تصویر است، بخوان و خلاصه/توضیح بده.`
+      : "";
   const base =
     `تو «پویا» هستی: مربی زنده آموزش برای دانش‌آموزان ایران.\n` +
     `قوانین سخت:\n` +
     `- ${levelLine(level)}\n` +
     `- همیشه مستقیماً به همان سؤال کاربر جواب بده. موضوع را عوض نکن.\n` +
     `- اگر پرسید «چرخ چیست» درباره چرخ بگو؛ نرو سراغ درس تصادفی.\n` +
-    `- اگر درباره خودت/مدل/از کجا بلدی پرسید، صادقانه و کوتاه بگو: دستیار آموزشی این اپ هستی و جواب از مدل AI می‌آید.\n` +
-    `- فقط وقتی کاربر صریحاً درس کوتاه یا لیست موضوع خواست، حالت درس کوتاه بگیر.\n` +
+    `- اگر درباره خودت/مدل پرسید، صادقانه و کوتاه بگو: دستیار آموزشی این اپ هستی.\n` +
+    `- فقط وقتی کاربر صریحاً درس کوتاه خواست، حالت درس کوتاه بگیر.\n` +
     `- زبان پاسخ = زبان پیام کاربر. اگر فارسی نوشت فقط فارسی (به‌جز مخفف‌های ریاضی مثل sin و cos).\n` +
     `- لحن گرم و کوتاه. ایموجی نگذار.\n` +
-    `- برای شکل هندسی از برچسب [shape:rhombus] و مشابه استفاده کن.\n` +
+    `- برای رسم شکل هندسی ساده در متن می‌توانی از برچسب [shape:rhombus] و مشابه استفاده کنی — این فقط برای تولید شکل است، نه محدودیت فهم تصویر.\n` +
     `- ${textbookStyleRules(level)}` +
+    vision +
     (coach ? `\n\n${coach}` : "");
   if (mode === "live" || mode === "language") {
     return `${base}\nحالت تمرین زبان (${lang.native}). اگر کاربر فارسی خواست، فارسی جواب بده.`;
@@ -174,7 +180,19 @@ function isQuotaStatus(status: number) {
   return status === 401 || status === 402 || status === 403 || status === 429;
 }
 
-async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
+type OpenAIContent =
+  | string
+  | Array<
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } }
+    >;
+
+async function callOpenAI(
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+  imageDataUrl?: string,
+): Promise<ChatResult | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     console.log("[pouya-ai] openai: no OPENAI_API_KEY set, skipping");
@@ -184,9 +202,27 @@ async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number)
   let base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
   base = base.replace(/\/chat\/completions$/, "");
   const url = `${base}/chat/completions`;
+
+  const messages: { role: string; content: OpenAIContent }[] = [{ role: "system", content: system }];
+  const lastIdx = history.length - 1;
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i];
+    if (m.role === "user" && i === lastIdx && imageDataUrl) {
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: m.content },
+          { type: "image_url", image_url: { url: imageDataUrl } },
+        ],
+      });
+    } else {
+      messages.push({ role: m.role, content: m.content });
+    }
+  }
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), imageDataUrl ? 45000 : 15000);
     let res: Response;
     try {
       res = await fetch(url, {
@@ -194,7 +230,7 @@ async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number)
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
           model,
-          messages: [{ role: "system", content: system }, ...history],
+          messages,
           max_tokens: maxTokens,
           temperature: 0.7,
         }),
@@ -223,15 +259,38 @@ async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number)
   }
 }
 
-async function callGemini(system: string, history: ChatMsg[], maxTokens: number): Promise<ChatResult | null> {
+async function callGemini(
+  system: string,
+  history: ChatMsg[],
+  maxTokens: number,
+  imageDataUrl?: string,
+): Promise<ChatResult | null> {
   const apiKey = (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
   if (!apiKey) {
     console.log("[pouya-ai] gemini: no GEMINI_API_KEY/GOOGLE_API_KEY set, skipping");
     return null;
   }
+  const parsed = imageDataUrl ? parseDataUrl(imageDataUrl) : null;
   const models = [process.env.GEMINI_MODEL, ...GEMINI_MODELS].filter(Boolean) as string[];
   for (const model of models) {
     try {
+      const contents = history.map((m, i) => {
+        const isLastUser = m.role === "user" && i === history.length - 1 && parsed;
+        if (isLastUser && parsed) {
+          return {
+            role: "user" as const,
+            parts: [
+              { text: m.content },
+              { inline_data: { mime_type: parsed.mime, data: parsed.b64 } },
+            ],
+          };
+        }
+        return {
+          role: (m.role === "assistant" ? "model" : "user") as "user" | "model",
+          parts: [{ text: m.content }],
+        };
+      });
+
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
         {
@@ -239,10 +298,7 @@ async function callGemini(system: string, history: ChatMsg[], maxTokens: number)
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: system }] },
-            contents: history.map((m) => ({
-              role: m.role === "assistant" ? "model" : "user",
-              parts: [{ text: m.content }],
-            })),
+            contents,
             generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 },
           }),
         },
@@ -271,13 +327,14 @@ async function chatComplete(
   history: ChatMsg[],
   maxTokens: number,
   fallback: () => string,
+  imageDataUrl?: string,
 ) {
   for (const id of DEFAULT_ORDER) {
     const result =
       id === "openai"
-        ? await callOpenAI(system, history, maxTokens)
+        ? await callOpenAI(system, history, maxTokens, imageDataUrl)
         : id === "gemini"
-          ? await callGemini(system, history, maxTokens)
+          ? await callGemini(system, history, maxTokens, imageDataUrl)
           : null;
     if (result?.ok && result.text) return { ok: true as const, text: result.text, provider: result.provider || id };
     if (result && !result.ok) console.error(`[pouya-ai] provider "${id}" failed: ${result.error}`);
@@ -291,11 +348,16 @@ export const askPouya = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       const short = data.mode === "live" || data.mode === "language";
+      const hasImage = Boolean(data.image && parseDataUrl(data.image));
       const result = await chatComplete(
-        systemPrompt(data.level, data.mode, data.lang, data.assistantId),
+        systemPrompt(data.level, data.mode, data.lang, data.assistantId, hasImage),
         data.messages,
-        short ? 1024 : 2048,
-        () => localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
+        short ? 1024 : hasImage ? 2048 : 2048,
+        () =>
+          hasImage
+            ? "تصویر را دیدم ولی الان اتصال مدل بینایی کامل نیست. یک‌بار دیگر بفرست یا بگو نمودار tan است یا شکل زیست — با متن هم کمکت می‌کنم."
+            : localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
+        hasImage ? data.image : undefined,
       );
       if (result.ok && result.text) {
         return { ...result, text: sanitizeStudentMath(result.text, data.level) };
