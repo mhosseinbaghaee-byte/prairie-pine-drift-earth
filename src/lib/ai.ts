@@ -41,7 +41,8 @@ type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; e
 type ProviderId = "openai" | "gemini";
 
 const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
-const DEFAULT_ORDER: ProviderId[] = ["openai", "gemini"];
+// Gemini first to save Liara quota; Liara remains fallback for chat + TTS still uses Liara key.
+const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai"];
 
 function levelLine(level: Level) {
   if (level === "kid") return "سطح: خیلی ساده، جمله‌های کوتاه، مثل کتاب ابتدایی/متوسطه اول.";
