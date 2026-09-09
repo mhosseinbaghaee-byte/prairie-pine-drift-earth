@@ -38,7 +38,8 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
 type ProviderId = "openai" | "gemini";
 
-const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+// Gemini model names change; prefer current IDs first (see Google AI 404 messages).
+const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
 const DEFAULT_ORDER: ProviderId[] = ["openai", "gemini"];
 
 function levelLine(level: Level) {
@@ -47,7 +48,6 @@ function levelLine(level: Level) {
   return "سطح: عمیق.";
 }
 
-/** قوانین ثابت نوشتار ریاضی/علوم برای دانش‌آموز */
 function textbookStyleRules(level: Level) {
   if (level === "adult") {
     return (
@@ -69,7 +69,6 @@ function textbookStyleRules(level: Level) {
   );
 }
 
-/** اگر مدل هنوز LaTeX داد، برای سطح دانش‌آموز تا حد ممکن تمیزش کن */
 function sanitizeStudentMath(text: string, level: Level): string {
   if (level === "adult") return text;
   let t = text;
@@ -89,14 +88,10 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\$/g, "");
   t = t.replace(/\\left|\\right/gi, "");
   t = t.replace(/\\,/g, " ");
-  t = t.replace(/\\
-/g, "\n");
   t = t.replace(/\\ /g, " ");
-  // 2^2 → ۲² تقریبی برای الگوهای ساده
   t = t.replace(/(\d+)\^2/g, "$1²");
   t = t.replace(/(\d+)\^3/g, "$1³");
   t = t.replace(/\btimes\b/gi, "×");
-  // فاصله‌های اضافی بعد از پاکسازی
   t = t.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   return t.trim();
 }
