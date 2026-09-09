@@ -1,4 +1,6 @@
 import { Fragment, type ReactNode } from "react";
+import { LessonDiagramSvg } from "./lesson-diagram-svg";
+import { diagramById } from "../lib/lesson-diagrams";
 
 function ShapeSvg({ kind }: { kind: string }) {
   const k = kind.trim().toLowerCase();
@@ -69,6 +71,20 @@ function ShapeSvg({ kind }: { kind: string }) {
   return null;
 }
 
+function DiagramBlock({ id }: { id: string }) {
+  const meta = diagramById(id.trim().toLowerCase());
+  const svg = <LessonDiagramSvg id={id} />;
+  if (!svg) return null;
+  return (
+    <figure className="my-2 space-y-1">
+      {svg}
+      {meta?.caption ? (
+        <figcaption className="text-center text-[11px] text-muted">{meta.caption}</figcaption>
+      ) : null}
+    </figure>
+  );
+}
+
 function inlineFormat(text: string): ReactNode[] {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
   return parts.map((part, i) => {
@@ -97,22 +113,37 @@ function inlineFormat(text: string): ReactNode[] {
   });
 }
 
+const DIAGRAM_RE = /\[diagram:([^\]]+)\]/i;
+const SHAPE_RE = /\[shape:[^\]]+\]|```shape:[^`]+```/i;
+
 export function RichText({ text }: { text: string }) {
   const blocks = text.split(/\n{2,}/);
   return (
     <div className="space-y-2 text-pretty">
       {blocks.map((block, bi) => {
+        const diagramOnly = block.match(/^\s*\[diagram:([^\]]+)\]\s*$/i);
+        if (diagramOnly) {
+          return (
+            <div key={bi}>
+              <DiagramBlock id={diagramOnly[1]} />
+            </div>
+          );
+        }
+
         const shapeMatch =
           block.match(/^\s*```shape:([^\n`]+)```\s*$/i) || block.match(/^\s*\[shape:([^\]]+)\]\s*$/i);
         if (shapeMatch) {
           const svg = <ShapeSvg kind={shapeMatch[1]} />;
           if (svg) return <div key={bi}>{svg}</div>;
         }
-        if (/\[shape:[^\]]+\]/i.test(block) || /```shape:[^`]+```/i.test(block)) {
-          const pieces = block.split(/(\[shape:[^\]]+\]|```shape:[^`]+```)/gi);
+
+        if (DIAGRAM_RE.test(block) || SHAPE_RE.test(block)) {
+          const pieces = block.split(/(\[diagram:[^\]]+\]|\[shape:[^\]]+\]|```shape:[^`]+```)/gi);
           return (
             <div key={bi} className="space-y-1">
               {pieces.map((p, pi) => {
+                const dm = p.match(/^\[diagram:([^\]]+)\]$/i);
+                if (dm) return <DiagramBlock key={pi} id={dm[1]} />;
                 const m = p.match(/^\[shape:([^\]]+)\]$/i) || p.match(/^```shape:([^`]+)```$/i);
                 if (m) return <ShapeSvg key={pi} kind={m[1]} />;
                 if (!p.trim()) return null;
@@ -125,6 +156,7 @@ export function RichText({ text }: { text: string }) {
             </div>
           );
         }
+
         if (/!\[[^\]]*\]\([^)]+\)/.test(block)) {
           const pieces = block.split(/(!\[[^\]]*\]\([^)]+\))/g);
           return (
@@ -153,6 +185,7 @@ export function RichText({ text }: { text: string }) {
             </div>
           );
         }
+
         const lines = block.split("\n");
         if (lines.every((l) => /^\s*[-*•]\s+/.test(l) || !l.trim())) {
           return (
