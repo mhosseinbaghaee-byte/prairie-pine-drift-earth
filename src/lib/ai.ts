@@ -42,16 +42,70 @@ const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-
 const DEFAULT_ORDER: ProviderId[] = ["openai", "gemini"];
 
 function levelLine(level: Level) {
-  if (level === "kid") return "سطح: خیلی ساده، جمله‌های کوتاه.";
-  if (level === "teen") return "سطح: دبیرستان. دقیق، با مثال.";
+  if (level === "kid") return "سطح: خیلی ساده، جمله‌های کوتاه، مثل کتاب ابتدایی/متوسطه اول.";
+  if (level === "teen") return "سطح: متوسط / دبیرستان. دقیق، با مثال روزمره و کتاب درسی.";
   return "سطح: عمیق.";
+}
+
+/** قوانین ثابت نوشتار ریاضی/علوم برای دانش‌آموز */
+function textbookStyleRules(level: Level) {
+  if (level === "adult") {
+    return (
+      `- توضیح شفاف بنویس. از LaTeX خام مثل $...$ یا \\times یا \\text پرهیز کن؛ ` +
+      `به‌جای آن از نماد ساده یونیکد استفاده کن: × ÷ ² ³ √.`
+    );
+  }
+  return (
+    `سبک آموزش (اجباری برای سطح ساده و متوسط):\n` +
+    `- مثل کتاب درسی مدرسه ایران توضیح بده: ساده، مرحله‌به‌مرحله، واضح.\n` +
+    `- هرگز LaTeX یا کد فرمول ننویس: نه $...$ نه \\times نه \\text نه \\frac نه کد انگلیسی times.\n` +
+    `- ضرب: با علامت × یا کلمه «ضربدر».\n` +
+    `- توان: بنویس «۲ به توان ۲» یا از نویسه ۲² استفاده کن (نه 2^2 داخل دلار).\n` +
+    `- اعداد را ترجیحاً با رقم فارسی بنویس: ۱ ۲ ۳ …\n` +
+    `- مثال درست: ۳ × ۲² = ۳ × ۴ = ۱۲\n` +
+    `- مثال ممنوع: $3\\times2^2$ یا times 3$\\ 2^2$ یا \\text{ب.م.م}\n` +
+    `- برای ب.م.م و ک.م.م همان واژه‌های فارسی کتاب را به کار ببر و با مثال عددی توضیح بده.\n` +
+    `- اگر شک داری نماد پیچیده لازم است، به‌جایش با کلمه توضیح بده.`
+  );
+}
+
+/** اگر مدل هنوز LaTeX داد، برای سطح دانش‌آموز تا حد ممکن تمیزش کن */
+function sanitizeStudentMath(text: string, level: Level): string {
+  if (level === "adult") return text;
+  let t = text;
+  t = t.replace(/\\times/gi, "×");
+  t = t.replace(/\\div/gi, "÷");
+  t = t.replace(/\\cdot/gi, "·");
+  t = t.replace(/\\pm/gi, "±");
+  t = t.replace(/\\leq/gi, "≤");
+  t = t.replace(/\\geq/gi, "≥");
+  t = t.replace(/\\neq/gi, "≠");
+  t = t.replace(/\\approx/gi, "≈");
+  t = t.replace(/\\sqrt\{([^}]*)\}/gi, "√($1)");
+  t = t.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/gi, "($1)÷($2)");
+  t = t.replace(/\\text\{([^}]*)\}/gi, "$1");
+  t = t.replace(/\\mathrm\{([^}]*)\}/gi, "$1");
+  t = t.replace(/\$\$/g, "");
+  t = t.replace(/\$/g, "");
+  t = t.replace(/\\left|\\right/gi, "");
+  t = t.replace(/\\,/g, " ");
+  t = t.replace(/\\
+/g, "\n");
+  t = t.replace(/\\ /g, " ");
+  // 2^2 → ۲² تقریبی برای الگوهای ساده
+  t = t.replace(/(\d+)\^2/g, "$1²");
+  t = t.replace(/(\d+)\^3/g, "$1³");
+  t = t.replace(/\btimes\b/gi, "×");
+  // فاصله‌های اضافی بعد از پاکسازی
+  t = t.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+  return t.trim();
 }
 
 function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId?: string) {
   const lang = langById(langId || "fa");
   const coach = assistantSystemExtra(assistantId);
   const base =
-    `تو «پویا» هستی: مربی زنده آموزش.\n` +
+    `تو «پویا» هستی: مربی زنده آموزش برای دانش‌آموزان ایران.\n` +
     `قوانین سخت:\n` +
     `- ${levelLine(level)}\n` +
     `- همیشه مستقیماً به همان سؤال کاربر جواب بده. موضوع را عوض نکن.\n` +
@@ -60,15 +114,16 @@ function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId
     `- فقط وقتی کاربر صریحاً درس کوتاه یا لیست موضوع خواست، حالت درس کوتاه بگیر.\n` +
     `- زبان پاسخ = زبان پیام کاربر. اگر فارسی نوشت فقط فارسی.\n` +
     `- لحن گرم و کوتاه. ایموجی نگذار.\n` +
-    `- برای شکل هندسی از برچسب [shape:rhombus] و مشابه استفاده کن.` +
+    `- برای شکل هندسی از برچسب [shape:rhombus] و مشابه استفاده کن.\n` +
+    `- ${textbookStyleRules(level)}` +
     (coach ? `\n\n${coach}` : "");
   if (mode === "live" || mode === "language") {
     return `${base}\nحالت تمرین زبان (${lang.native}). اگر کاربر فارسی خواست، فارسی جواب بده.`;
   }
   if (mode === "lesson") {
-    return `${base}\nحالت درس کوتاه: عنوان، ایده اصلی، سه بخش، مثال، سؤال پایانی.`;
+    return `${base}\nحالت درس کوتاه: عنوان، ایده اصلی، سه بخش ساده، مثال عددی، سؤال پایانی. بدون LaTeX.`;
   }
-  return `${base}\nحالت گفتگو: مستقیم و مفید جواب بده.`;
+  return `${base}\nحالت گفتگو: مستقیم، مفید، به سبک کتاب درسی.`;
 }
 
 async function readError(res: Response) {
@@ -202,17 +257,24 @@ export const askPouya = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       const short = data.mode === "live" || data.mode === "language";
-      return await chatComplete(
+      const result = await chatComplete(
         systemPrompt(data.level, data.mode, data.lang, data.assistantId),
         data.messages,
         short ? 1024 : 2048,
         () => localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
       );
+      if (result.ok && result.text) {
+        return { ...result, text: sanitizeStudentMath(result.text, data.level) };
+      }
+      return result;
     } catch (err) {
       console.error("[pouya-ai] askPouya threw:", err instanceof Error ? err.message : err);
       return {
         ok: true as const,
-        text: localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
+        text: sanitizeStudentMath(
+          localTutorReply({ messages: data.messages, mode: data.mode, lang: data.lang }),
+          data.level,
+        ),
         provider: "local",
       };
     }
