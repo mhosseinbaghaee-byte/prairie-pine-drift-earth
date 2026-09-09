@@ -38,7 +38,6 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
 type ProviderId = "openai" | "gemini";
 
-// Gemini model names change; prefer current IDs first (see Google AI 404 messages).
 const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
 const DEFAULT_ORDER: ProviderId[] = ["openai", "gemini"];
 
@@ -51,27 +50,41 @@ function levelLine(level: Level) {
 function textbookStyleRules(level: Level) {
   if (level === "adult") {
     return (
-      `- توضیح شفاف بنویس. از LaTeX خام مثل $...$ یا \\times یا \\text پرهیز کن؛ ` +
-      `به‌جای آن از نماد ساده یونیکد استفاده کن: × ÷ ² ³ √.`
+      `- توضیح شفاف بنویس. از LaTeX خام مثل $...$ یا \\frac یا \\cos پرهیز کن؛ ` +
+      `به‌جای آن از نماد ساده: × ÷ ² ³ √ و کلمات فارسی استفاده کن.`
     );
   }
   return (
     `سبک آموزش (اجباری برای سطح ساده و متوسط):\n` +
     `- مثل کتاب درسی مدرسه ایران توضیح بده: ساده، مرحله‌به‌مرحله، واضح.\n` +
-    `- هرگز LaTeX یا کد فرمول ننویس: نه $...$ نه \\times نه \\text نه \\frac نه کد انگلیسی times.\n` +
-    `- ضرب: با علامت × یا کلمه «ضربدر».\n` +
-    `- توان: بنویس «۲ به توان ۲» یا از نویسه ۲² استفاده کن (نه 2^2 داخل دلار).\n` +
-    `- اعداد را ترجیحاً با رقم فارسی بنویس: ۱ ۲ ۳ …\n` +
-    `- مثال درست: ۳ × ۲² = ۳ × ۴ = ۱۲\n` +
-    `- مثال ممنوع: $3\\times2^2$ یا times 3$\\ 2^2$ یا \\text{ب.م.م}\n` +
-    `- برای ب.م.م و ک.م.م همان واژه‌های فارسی کتاب را به کار ببر و با مثال عددی توضیح بده.\n` +
-    `- اگر شک داری نماد پیچیده لازم است، به‌جایش با کلمه توضیح بده.`
+    `- هرگز LaTeX یا کد فرمول ننویس: نه $ نه \\frac نه \\cos نه \\sin نه \\theta نه \\times نه [ ] با بک‌اسلش.\n` +
+    `- به‌جای cos بنویس «کسینوس»، به‌جای sin «سینوس»، به‌جای tan «تانژانت».\n` +
+    `- کسر را این‌طور بنویس: (صورت) ÷ (مخرج) یا «صورت روی مخرج».\n` +
+    `- ضرب با × یا «ضربدر». توان: «۲ به توان ۲» یا ۲².\n` +
+    `- اعداد ترجیحاً فارسی.\n` +
+    `- مثال درست: کسینوس زاویه = (ضلع مجاور) ÷ (وتر)\n` +
+    `- مثال ممنوع: \\cos(\\theta) = \\frac{a}{b}`
   );
 }
 
+/** پاک‌سازی LaTeX و نمادهای کدمانند برای نمایش کتاب‌درسی */
 function sanitizeStudentMath(text: string, level: Level): string {
-  if (level === "adult") return text;
   let t = text;
+
+  // کسرها
+  t = t.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, "($1) ÷ ($2)");
+  t = t.replace(/\\dfrac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, "($1) ÷ ($2)");
+
+  // توابع مثلثاتی و یونانی
+  t = t.replace(/\\cos\b/gi, level === "adult" ? "cos" : "کسینوس");
+  t = t.replace(/\\sin\b/gi, level === "adult" ? "sin" : "سینوس");
+  t = t.replace(/\\tan\b/gi, level === "adult" ? "tan" : "تانژانت");
+  t = t.replace(/\\theta\b/gi, "θ");
+  t = t.replace(/\\pi\b/gi, "π");
+  t = t.replace(/\\alpha\b/gi, "α");
+  t = t.replace(/\\beta\b/gi, "β");
+
+  // عملگرها
   t = t.replace(/\\times/gi, "×");
   t = t.replace(/\\div/gi, "÷");
   t = t.replace(/\\cdot/gi, "·");
@@ -80,19 +93,39 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\\geq/gi, "≥");
   t = t.replace(/\\neq/gi, "≠");
   t = t.replace(/\\approx/gi, "≈");
-  t = t.replace(/\\sqrt\{([^}]*)\}/gi, "√($1)");
-  t = t.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/gi, "($1)÷($2)");
-  t = t.replace(/\\text\{([^}]*)\}/gi, "$1");
-  t = t.replace(/\\mathrm\{([^}]*)\}/gi, "$1");
+  t = t.replace(/\\sqrt\s*\{([^{}]*)\}/gi, "√($1)");
+  t = t.replace(/\\text\s*\{([^{}]*)\}/gi, "$1");
+  t = t.replace(/\\mathrm\s*\{([^{}]*)\}/gi, "$1");
+
+  // بلوک‌ها و دلار
   t = t.replace(/\$\$/g, "");
   t = t.replace(/\$/g, "");
+  t = t.replace(/\\\[|\\\]/g, "");
+  t = t.replace(/\\\(|\\\)/g, "");
   t = t.replace(/\\left|\\right/gi, "");
   t = t.replace(/\\,/g, " ");
   t = t.replace(/\\ /g, " ");
+
+  // هر فرمان باقی‌مانده مثل \something
+  t = t.replace(/\\[a-zA-Z]+/g, "");
+
+  // براکت‌های خالی/اضافی رایج بعد از LaTeX
+  t = t.replace(/\{\s*\}/g, "");
+  t = t.replace(/[ \t]*\n/g, "\n");
+  t = t.replace(/\n{3,}/g, "\n\n");
+  t = t.replace(/[ \t]{2,}/g, " ");
+
   t = t.replace(/(\d+)\^2/g, "$1²");
   t = t.replace(/(\d+)\^3/g, "$1³");
   t = t.replace(/\btimes\b/gi, "×");
-  t = t.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+
+  // برای سطح دانش‌آموز: cos( انگلیسی را هم فارسی کن
+  if (level !== "adult") {
+    t = t.replace(/\bcos\s*\(/gi, "کسینوس(");
+    t = t.replace(/\bsin\s*\(/gi, "سینوس(");
+    t = t.replace(/\btan\s*\(/gi, "تانژانت(");
+  }
+
   return t.trim();
 }
 
