@@ -52,25 +52,41 @@ function textbookStyleRules(level: Level) {
   return (
     `سبک آموزش (کتاب درسی ایران):\n` +
     `- ساده، مرحله‌به‌مرحله، واضح.\n` +
-    `- مخفف‌های کتاب درسی مجاز و ترجیح داده می‌شوند: sin ، cos ، tan ، cot ، sec ، csc.\n` +
-    `- مثال درست: cos(θ) = (ضلع مجاور) ÷ (وتر)\n` +
-    `- هرگز LaTeX خام ننویس: نه $...$ نه \\frac نه \\cos نه \\theta با بک‌اسلش.\n` +
-    `- کسر را بنویس: (صورت) ÷ (مخرج) یا «صورت / مخرج».\n` +
+    `- مخفف‌های کتاب درسی مجاز: sin ، cos ، tan ، cot ، sec ، csc.\n` +
+    `- کسر را ترجیحاً بالا–پایین بنویس (صورت روی خط، مخرج زیر خط)، مثل کتاب:\n` +
+    `    ضلع مجاور\n` +
+    `  ──────────\n` +
+    `      وتر\n` +
+    `- شکل افقی هم مجاز است: (ضلع مجاور) / (وتر) یا با ÷.\n` +
+    `- هرگز LaTeX خام ننویس: نه $...$ نه \\frac نه \\cos با بک‌اسلش.\n` +
     `- ضرب با × . توان: ۲² یا «۲ به توان ۲».\n` +
+    `- مثال درست: cos(θ) = ضلع مجاور / وتر\n` +
     `- مثال ممنوع: \\cos(\\theta)=\\frac{a}{b}`
   );
 }
 
-/** فقط علامت‌های LaTeX را پاک کن؛ sin/cos/tan/cot را نگه دار */
+/** فقط علامت‌های LaTeX را پاک کن؛ sin/cos/tan/cot را نگه دار؛ کسر را بالا–پایین کن */
 function sanitizeStudentMath(text: string, level: Level): string {
   void level;
   let t = text;
 
-  // کسرها
-  t = t.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, "($1) ÷ ($2)");
-  t = t.replace(/\\dfrac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, "($1) ÷ ($2)");
+  // \\frac{a}{b} → نمایش بالا–پایین کتاب درسی
+  t = t.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, (_m, a: string, b: string) => {
+    const top = String(a).trim();
+    const bot = String(b).trim();
+    const w = Math.max(top.length, bot.length, 3);
+    const line = "─".repeat(Math.min(w + 2, 16));
+    return `\n  ${top}\n${line}\n  ${bot}\n`;
+  });
+  t = t.replace(/\\dfrac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, (_m, a: string, b: string) => {
+    const top = String(a).trim();
+    const bot = String(b).trim();
+    const w = Math.max(top.length, bot.length, 3);
+    const line = "─".repeat(Math.min(w + 2, 16));
+    return `\n  ${top}\n${line}\n  ${bot}\n`;
+  });
 
-  // LaTeX مثلثاتی → مخفف کتاب درسی (بدون بک‌اسلش)
+  // LaTeX مثلثاتی → مخفف کتاب درسی
   t = t.replace(/\\cos\b/gi, "cos");
   t = t.replace(/\\sin\b/gi, "sin");
   t = t.replace(/\\tan\b/gi, "tan");
