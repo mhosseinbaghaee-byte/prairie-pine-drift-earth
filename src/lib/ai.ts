@@ -38,7 +38,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
 type ProviderId = "openai" | "gemini";
 
-const GEMINI_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
 const DEFAULT_ORDER: ProviderId[] = ["openai", "gemini"];
 
 function levelLine(level: Level) {
@@ -52,7 +52,12 @@ function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId
   const coach = assistantSystemExtra(assistantId);
   const base =
     `تو «پویا» هستی: مربی زنده آموزش.\n` +
-    `قوانین:\n- ${levelLine(level)}\n` +
+    `قوانین سخت:\n` +
+    `- ${levelLine(level)}\n` +
+    `- همیشه مستقیماً به همان سؤال کاربر جواب بده. موضوع را عوض نکن.\n` +
+    `- اگر پرسید «چرخ چیست» درباره چرخ بگو؛ نرو سراغ درس تصادفی.\n` +
+    `- اگر درباره خودت/مدل/از کجا بلدی پرسید، صادقانه و کوتاه بگو: دستیار آموزشی این اپ هستی و جواب از مدل AI می‌آید.\n` +
+    `- فقط وقتی کاربر صریحاً درس کوتاه یا لیست موضوع خواست، حالت درس کوتاه بگیر.\n` +
     `- زبان پاسخ = زبان پیام کاربر. اگر فارسی نوشت فقط فارسی.\n` +
     `- لحن گرم و کوتاه. ایموجی نگذار.\n` +
     `- برای شکل هندسی از برچسب [shape:rhombus] و مشابه استفاده کن.` +
@@ -60,7 +65,10 @@ function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId
   if (mode === "live" || mode === "language") {
     return `${base}\nحالت تمرین زبان (${lang.native}). اگر کاربر فارسی خواست، فارسی جواب بده.`;
   }
-  return `${base}\nحالت گفتگو: همیشه به زبان کاربر جواب بده.`;
+  if (mode === "lesson") {
+    return `${base}\nحالت درس کوتاه: عنوان، ایده اصلی، سه بخش، مثال، سؤال پایانی.`;
+  }
+  return `${base}\nحالت گفتگو: مستقیم و مفید جواب بده.`;
 }
 
 async function readError(res: Response) {
@@ -85,8 +93,6 @@ async function callOpenAI(system: string, history: ChatMsg[], maxTokens: number)
   }
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   let base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  // Defensive: if OPENAI_BASE_URL was set including the endpoint path already, strip it
-  // so we don't end up calling .../chat/completions/chat/completions.
   base = base.replace(/\/chat\/completions$/, "");
   const url = `${base}/chat/completions`;
   try {
