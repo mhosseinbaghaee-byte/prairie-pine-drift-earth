@@ -1,1 +1,6 @@
-Ly8gTk9URTogVGhpcyBzY3JpcHQgcHJldmlvdXNseSBmb3JjZS1yZXdyb3RlIERFRkFVTFRfT1JERVIgaW4gc3JjL2xpYi9haS50cwovLyBvbiBldmVyeSBidWlsZCB0byBHZW1pbmktb25seSwgd2hpY2ggc2lsZW50bHkgaWdub3JlZCB0aGUgY29uZmlndXJlZCBPcGVuQUkvTGlhcmEKLy8ga2V5IGV2ZW4gYWZ0ZXIgaXQgd2FzIHB1cmNoYXNlZC4gSXQgaXMgbm93IGEgbm8tb3Agc28gdGhlIHByb3ZpZGVyIG9yZGVyCi8vIGNvbW1pdHRlZCBpbiBzcmMvbGliL2FpLnRzIGlzIHJlc3BlY3RlZCBhcy1pcy4gS2VwdCBhcyBhIGZpbGUgKHJhdGhlciB0aGFuCi8vIHJlbW92ZWQpIHNvIHRoZSBidWlsZCBzY3JpcHQgaW4gcGFja2FnZS5qc29uIGRvZXMgbm90IG5lZWQgdG8gY2hhbmdlLgpjb25zb2xlLmxvZygiQUkgcHJvdmlkZXIgb3JkZXIgbm9ybWFsaXphdGlvbjogc2tpcHBlZCAobm8tb3ApIC0gdXNpbmcgc3JjL2xpYi9haS50cyBhcyBjb21taXR0ZWQuIik7Cg==
+// NOTE: This script previously force-rewrote DEFAULT_ORDER in src/lib/ai.ts
+// on every build to Gemini-only, which silently ignored the configured OpenAI/Liara
+// key even after it was purchased. It is now a no-op so the provider order
+// committed in src/lib/ai.ts is respected as-is. Kept as a file (rather than
+// removed) so the build script in package.json does not need to change.
+console.log("AI provider order normalization: skipped (no-op) - using src/lib/ai.ts as committed.");
