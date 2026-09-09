@@ -3,6 +3,7 @@ import { z } from "zod";
 import { localQuiz, localTutorReply, todayFact, type QuizPayload, type QuizQuestion } from "./library";
 import { langById, type Level } from "./topics";
 import { assistantSystemExtra } from "./assistants";
+import { diagramTag, matchDiagram } from "./lesson-diagrams";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -155,6 +156,7 @@ function systemPrompt(level: Level, mode: ChatMode, langId?: string, assistantId
     `- زبان پاسخ = زبان پیام کاربر. اگر فارسی نوشت فقط فارسی (به‌جز مخفف‌های ریاضی مثل sin و cos).\n` +
     `- لحن گرم و کوتاه. ایموجی نگذار.\n` +
     `- برای رسم شکل هندسی ساده در متن می‌توانی از برچسب [shape:rhombus] و مشابه استفاده کنی — این فقط برای تولید شکل است، نه محدودیت فهم تصویر.\n` +
+    `- اگر درس نیاز به شکل آموزشی دارد از برچسب دقیق بانک شکل استفاده کن: [diagram:neuron] [diagram:reflex] [diagram:cell] [diagram:plant_cell] [diagram:photosynthesis] [diagram:atom] [diagram:heart] [diagram:digestive] [diagram:water_cycle] [diagram:fraction] [diagram:triangle_types] [diagram:wave] [diagram:circuit] [diagram:dna] [diagram:earth_layers]. فقط همین idها.\n` +
     `- ${textbookStyleRules(level)}` +
     vision +
     (coach ? `\n\n${coach}` : "");
@@ -361,7 +363,13 @@ export const askPouya = createServerFn({ method: "POST" })
         hasImage ? data.image : undefined,
       );
       if (result.ok && result.text) {
-        return { ...result, text: sanitizeStudentMath(result.text, data.level) };
+        let text = sanitizeStudentMath(result.text, data.level);
+        const lastUser = [...data.messages].reverse().find((m) => m.role === "user");
+        if (lastUser && !/\[diagram:[^\]]+\]/i.test(text)) {
+          const hit = matchDiagram(lastUser.content);
+          if (hit) text = `${diagramTag(hit.id)}\n\n${text}`;
+        }
+        return { ...result, text };
       }
       return result;
     } catch (err) {
