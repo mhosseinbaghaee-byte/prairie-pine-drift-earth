@@ -1,5 +1,5 @@
 import { type RefObject, useRef, useState } from "react";
-import { Bookmark, BookOpen, History, Languages, Mic, Plus, Send, Trash2, X } from "lucide-react";
+import { Bookmark, BookOpen, Check, Copy, History, Languages, Mic, Plus, Send, Trash2, X } from "lucide-react";
 import {
   LANGUAGES,
   SCENARIOS,
@@ -19,19 +19,69 @@ export type ChatAttachment = { name: string; mime: string; dataUrl: string };
 
 function Bubble({ role, text, image, live }: { role: "user" | "assistant"; text: string; image?: string; live?: boolean }) {
   const mine = role === "user";
+  const [copied, setCopied] = useState(false);
+
+  async function copyText() {
+    if (!text?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   return (
-    <article
-      className={cn(
-        "max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-normal shadow-sm",
-        mine ? "ms-auto bg-stage text-cream" : "border border-white/40 bg-white/85 text-ink backdrop-blur-md",
-        live && "opacity-95",
-      )}
-    >
-      {image ? (
-        <img src={image} alt="پیوست" className={cn("mb-2 max-h-48 w-auto max-w-full rounded-xl object-contain", mine ? "border border-white/20" : "border border-border/40")} />
+    <div className={cn("flex max-w-[88%] flex-col gap-0.5", mine ? "ms-auto" : "")}>
+      <article
+        className={cn(
+          "rounded-2xl px-4 py-3 text-sm leading-normal shadow-sm",
+          mine ? "bg-stage text-cream" : "border border-white/40 bg-white/85 text-ink backdrop-blur-md",
+          live && "opacity-95",
+        )}
+      >
+        {image ? (
+          <img
+            src={image}
+            alt="پیوست"
+            className={cn(
+              "mb-2 max-h-48 w-auto max-w-full rounded-xl object-contain",
+              mine ? "border border-white/20" : "border border-border/40",
+            )}
+          />
+        ) : null}
+        {mine ? <p className="text-pretty">{text}</p> : <RichText text={text} />}
+      </article>
+      {!live ? (
+        <button
+          type="button"
+          onClick={copyText}
+          className={cn(
+            "inline-flex size-5 shrink-0 items-center justify-center rounded-md self-end",
+            "text-cream/45 transition hover:bg-white/10 hover:text-cream/90",
+            mine && "text-cream/50",
+          )}
+          aria-label={copied ? "کپی شد" : "کپی متن"}
+          title={copied ? "کپی شد" : "کپی"}
+        >
+          {copied ? <Check className="size-2.5" strokeWidth={2.5} /> : <Copy className="size-2.5" strokeWidth={2.25} />}
+        </button>
       ) : null}
-      {mine ? <p className="text-pretty">{text}</p> : <RichText text={text} />}
-    </article>
+    </div>
   );
 }
 
