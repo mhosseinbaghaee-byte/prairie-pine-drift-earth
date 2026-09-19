@@ -7,10 +7,12 @@ function ZoomableImage({
   src,
   alt,
   className,
+  onError,
 }: {
   src: string;
   alt: string;
   className?: string;
+  onError?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -36,7 +38,14 @@ function ZoomableImage({
         className="block w-full cursor-zoom-in border-0 bg-transparent p-0 text-start"
         aria-label={`بزرگ‌نمایی: ${alt}`}
       >
-        <img src={src} alt={alt} className={className} loading="lazy" referrerPolicy="no-referrer" />
+        <img
+          src={src}
+          alt={alt}
+          className={className}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={onError}
+        />
         <span className="mt-0.5 block text-center text-[10px] text-fg-subtle">برای بزرگ‌نمایی لمس کن</span>
       </button>
       {open ? (
@@ -149,26 +158,33 @@ function DiagramBlock({ id }: { id: string }) {
   const svg = <LessonDiagramSvg id={id} />;
   const gallery = meta?.imageGallery?.filter((g) => g.url) || [];
   const single = meta?.imageUrl;
+  const [imgOk, setImgOk] = useState(Boolean(single || gallery.length));
 
   if (!svg && !single && gallery.length === 0) return null;
 
   return (
     <figure className="my-2 space-y-2">
-      {gallery.length > 0 ? (
+      {gallery.length > 0 && imgOk ? (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {gallery.map((g) => (
             <div key={g.url} className="overflow-hidden rounded-xl border border-border/40 bg-white">
-              <ZoomableImage src={g.url} alt={g.label} className="mx-auto max-h-48 w-full object-contain" />
+              <ZoomableImage
+                src={g.url}
+                alt={g.label}
+                className="mx-auto max-h-48 w-full object-contain"
+                onError={() => setImgOk(false)}
+              />
               <p className="border-t border-border/30 px-1 py-1 text-center text-[11px] text-fg-muted">{g.label}</p>
             </div>
           ))}
         </div>
-      ) : single ? (
+      ) : single && imgOk ? (
         <div className="overflow-hidden rounded-xl border border-border/40 bg-white">
           <ZoomableImage
             src={single}
             alt={meta?.title || id}
             className="mx-auto max-h-72 w-auto max-w-full object-contain sm:max-h-96"
+            onError={() => setImgOk(false)}
           />
         </div>
       ) : (
@@ -177,7 +193,7 @@ function DiagramBlock({ id }: { id: string }) {
       {meta?.caption ? (
         <figcaption className="text-center text-[11px] text-muted">{meta.caption}</figcaption>
       ) : null}
-      {meta?.attribution ? (
+      {meta?.attribution && imgOk ? (
         <figcaption className="text-center text-[10px] text-fg-subtle">{meta.attribution}</figcaption>
       ) : null}
     </figure>
