@@ -1,7 +1,70 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { LessonDiagramSvg } from "./lesson-diagram-svg";
 import { diagramById } from "../lib/lesson-diagrams";
 import { FunctionGraph } from "./function-graph";
+
+function ZoomableImage({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="block w-full cursor-zoom-in border-0 bg-transparent p-0 text-start"
+        aria-label={`بزرگ‌نمایی: ${alt}`}
+      >
+        <img src={src} alt={alt} className={className} loading="lazy" referrerPolicy="no-referrer" />
+        <span className="mt-0.5 block text-center text-[10px] text-fg-subtle">برای بزرگ‌نمایی لمس کن</span>
+      </button>
+      {open ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-3"
+          onClick={() => setOpen(false)}
+        >
+          <button
+            type="button"
+            className="absolute end-3 top-3 rounded-full bg-white/90 px-3 py-1 text-sm text-ink"
+            onClick={() => setOpen(false)}
+          >
+            بستن
+          </button>
+          <img
+            src={src}
+            alt={alt}
+            className="max-h-[92dvh] max-w-[96vw] object-contain"
+            onClick={(e) => e.stopPropagation()}
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 function ShapeSvg({ kind }: { kind: string }) {
   const k = kind.trim().toLowerCase();
@@ -86,25 +149,19 @@ function DiagramBlock({ id }: { id: string }) {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {gallery.map((g) => (
             <div key={g.url} className="overflow-hidden rounded-xl border border-border/40 bg-white">
-              <img
-                src={g.url}
-                alt={g.label}
-                className="mx-auto max-h-40 w-full object-contain"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
+              <ZoomableImage src={g.url} alt={g.label} className="mx-auto max-h-48 w-full object-contain" />
               <p className="border-t border-border/30 px-1 py-1 text-center text-[11px] text-fg-muted">{g.label}</p>
             </div>
           ))}
         </div>
       ) : single ? (
-        <img
-          src={single}
-          alt={meta?.title || id}
-          className="mx-auto max-h-56 w-auto max-w-full rounded-xl border border-border/40 bg-white object-contain"
-          loading="lazy"
-          referrerPolicy="no-referrer"
-        />
+        <div className="overflow-hidden rounded-xl border border-border/40 bg-white">
+          <ZoomableImage
+            src={single}
+            alt={meta?.title || id}
+            className="mx-auto max-h-72 w-auto max-w-full object-contain sm:max-h-96"
+          />
+        </div>
       ) : (
         svg
       )}
@@ -210,13 +267,11 @@ export function RichText({ text }: { text: string }) {
                 const im = p.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
                 if (im) {
                   return (
-                    <img
+                    <ZoomableImage
                       key={pi}
                       src={im[2]}
                       alt={im[1] || "تصویر آموزشی"}
                       className="my-1 max-h-56 w-auto max-w-full rounded-xl border border-border/40 object-contain"
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
                     />
                   );
                 }
