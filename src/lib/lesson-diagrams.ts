@@ -1,6 +1,6 @@
 /**
- * بانک شکل‌های آموزشی پویا — فاز ۱
- * SVG + در صورت وجود تصویر آزاد ویکی‌مدیا کامنز
+ * بانک شکل‌های آموزشی پویا
+ * SVG + تصویر آزاد ویکی‌مدیا کامنز (با ذکر منبع)
  */
 
 export type LessonDiagram = {
@@ -10,11 +10,8 @@ export type LessonDiagram = {
   grades: string;
   keywords: string[];
   caption: string;
-  /** تصویر آموزشی از ویکی‌مدیا کامنز (اختیاری) */
   imageUrl?: string;
-  /** چند تصویر کنار هم (مثلاً سه نوع ماهیچه) */
   imageGallery?: { url: string; label: string }[];
-  /** ذکر منبع آزاد — الزامی وقتی imageUrl/gallery هست */
   attribution?: string;
 };
 
@@ -93,6 +90,77 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     attribution: "منبع تصاویر: ویکی‌مدیا کامنز (آزاد) — Blausen Medical و بافت‌شناسی آموزشی",
   },
   {
+    id: "periodic_table",
+    title: "جدول تناوبی (مندلیف)",
+    subject: "شیمی",
+    grades: "هشتم تا دوازدهم",
+    keywords: [
+      "جدول مندلیف",
+      "جدول تناوبی",
+      "جدول تناوبی عناصر",
+      "جدول عناصر",
+      "periodic table",
+      "مندلیف",
+      "عناصر شیمیایی",
+      "گروه فلزی",
+      "هالوژن",
+      "گاز نجیب",
+    ],
+    caption: "عناصر بر اساس عدد اتمی در دوره‌ها (سطر) و گروه‌ها (ستون) چیده شده‌اند.",
+    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Periodic_table_large.svg?width=960",
+    attribution: "منبع: ویکی‌مدیا کامنز — جدول تناوبی (آزاد)",
+  },
+  {
+    id: "water_molecule",
+    title: "مولکول آب",
+    subject: "شیمی / علوم",
+    grades: "ششم تا دهم",
+    keywords: ["مولکول آب", "اتم آب", "H2O", "H₂O", "آب مولکول", "water molecule"],
+    caption: "هر مولکول آب از دو اتم هیدروژن و یک اتم اکسیژن ساخته شده (H₂O).",
+    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Water-3D-balls.png?width=640",
+    attribution: "منبع: ویکی‌مدیا کامنز — مدل مولکول آب",
+  },
+  {
+    id: "gold_atom",
+    title: "آرایش الکترونی طلا",
+    subject: "شیمی",
+    grades: "نهم تا دوازدهم",
+    keywords: ["اتم طلا", "طلا", "gold atom", "آرایش الکترونی طلا", "عنصر طلا"],
+    caption: "طلا عنصر با عدد اتمی ۷۹؛ لایه‌های الکترونی در تصویر دیده می‌شود.",
+    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Electron_shell_079_gold.png?width=640",
+    attribution: "منبع: ویکی‌مدیا کامنز — لایه الکترونی طلا",
+  },
+  {
+    id: "mercury_atom",
+    title: "آرایش الکترونی جیوه",
+    subject: "شیمی",
+    grades: "نهم تا دوازدهم",
+    keywords: ["اتم جیوه", "جیوه", "mercury", "آرایش الکترونی جیوه", "عنصر جیوه"],
+    caption: "جیوه فلز مایع در دمای اتاق؛ عدد اتمی ۸۰.",
+    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Electron_shell_080_mercury.png?width=640",
+    attribution: "منبع: ویکی‌مدیا کامنز — لایه الکترونی جیوه",
+  },
+  {
+    id: "mercury_element",
+    title: "جیوه مایع",
+    subject: "شیمی",
+    grades: "هشتم تا دهم",
+    keywords: ["جیوه مایع", "فلز مایع", "liquid mercury"],
+    caption: "جیوه تنها فلزی است که در دمای اتاق مایع است.",
+    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Pouring_liquid_mercury_bionerd.jpg?width=640",
+    attribution: "منبع: ویکی‌مدیا کامنز — تصویر جیوه مایع",
+  },
+  {
+    id: "earth_map",
+    title: "نقشه ساده زمین",
+    subject: "جغرافیا",
+    grades: "چهارم تا نهم",
+    keywords: ["نقشه جهان", "نقشه زمین", "قاره", "اقیانوس", "جغرافیا نقشه", "world map"],
+    caption: "نقشه جهان برای شناخت قاره‌ها و اقیانوس‌ها.",
+    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/World_map_blank_without_borders.svg?width=900",
+    attribution: "منبع: ویکی‌مدیا کامنز — نقشه جهان",
+  },
+  {
     id: "photosynthesis",
     title: "فتوسنتز",
     subject: "علوم / زیست",
@@ -105,7 +173,7 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     title: "مدل ساده اتم",
     subject: "شیمی / علوم",
     grades: "هشتم تا دهم",
-    keywords: ["اتم", "پروتون", "نوترون", "الکترون", "هسته اتم"],
+    keywords: ["مدل اتم", "پروتون نوترون الکترون", "هسته اتم", "atom model"],
     caption: "هسته (پروتون و نوترون) + الکترون در اطراف.",
   },
   {
@@ -129,7 +197,7 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     title: "چرخه آب",
     subject: "علوم",
     grades: "چهارم تا هفتم",
-    keywords: ["چرخه آب", "تبخیر", "بارش", "میعان", "آب"],
+    keywords: ["چرخه آب", "تبخیر", "بارش", "میعان"],
     caption: "تبخیر → میعان → بارش → جریان روی زمین.",
   },
   {
@@ -153,7 +221,7 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     title: "موج ساده",
     subject: "فیزیک",
     grades: "هشتم / یازدهم",
-    keywords: ["موج", "طول موج", "دامنه", "فرکانس", "sin"],
+    keywords: ["موج", "طول موج", "دامنه", "فرکانس"],
     caption: "دامنه ارتفاع موج و طول موج فاصلهٔ دو قلهٔ پشت‌سرهم است.",
   },
   {
@@ -186,7 +254,6 @@ export function diagramById(id: string): LessonDiagram | undefined {
   return LESSON_DIAGRAMS.find((d) => d.id === id);
 }
 
-/** بهترین شکل مطابق متن سؤال کاربر */
 export function matchDiagram(text: string): LessonDiagram | null {
   const t = text.toLowerCase().trim();
   if (t.length < 2) return null;
