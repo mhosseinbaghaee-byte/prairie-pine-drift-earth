@@ -8,6 +8,8 @@ export type StoredChatMsg = {
 export type ChatSession = {
   id: string;
   title: string;
+  /** زنگ/موضوع جدا تا گفتگوها قاطی نشوند */
+  topic?: string;
   messages: StoredChatMsg[];
   createdAt: string;
   updatedAt: string;
@@ -47,6 +49,12 @@ export function listChatSessions(): ChatSession[] {
   return read().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
+export function listChatSessionsByTopic(topic: string): ChatSession[] {
+  const t = topic.trim();
+  if (!t) return listChatSessions();
+  return listChatSessions().filter((s) => (s.topic || "").trim() === t);
+}
+
 export function getChatSession(id: string): ChatSession | undefined {
   return read().find((s) => s.id === id);
 }
@@ -55,10 +63,10 @@ export function titleFromMessages(messages: StoredChatMsg[]): string {
   const firstUser = messages.find((m) => m.role === "user")?.content?.trim();
   if (firstUser) {
     const line = firstUser.split("\n").map((l) => l.trim()).find(Boolean) || firstUser;
-    return line.replace(/[*`#_]/g, "").slice(0, 48) || "گفتگو";
+    return line.replace(/[*`#_\[\]]/g, "").replace(/diagram:[a-z_]+/gi, "").slice(0, 48) || "گفتگو";
   }
   const firstAsst = messages.find((m) => m.role === "assistant")?.content?.trim();
-  if (firstAsst) return firstAsst.replace(/[*`#_]/g, "").slice(0, 48);
+  if (firstAsst) return firstAsst.replace(/[*`#_\[\]]/g, "").slice(0, 48);
   return "گفتگوی تازه";
 }
 
@@ -72,9 +80,18 @@ export function serializeMessages(
   }));
 }
 
+function inferTopic(messages: StoredChatMsg[], explicit?: string): string | undefined {
+  if (explicit?.trim()) return explicit.trim().slice(0, 40);
+  const first = messages.find((m) => m.role === "user")?.content || "";
+  const line = first.split("\n").map((l) => l.trim()).find(Boolean) || "";
+  if (!line) return undefined;
+  return line.replace(/[*`#_]/g, "").slice(0, 32);
+}
+
 export function upsertChatSession(input: {
   id?: string;
   messages: Array<{ role: "user" | "assistant"; content: string; image?: string }>;
+  topic?: string;
 }): ChatSession | null {
   const msgs = serializeMessages(input.messages);
   if (!msgs.some((m) => m.role === "assistant")) return null;
@@ -87,6 +104,7 @@ export function upsertChatSession(input: {
         ...list[idx],
         messages: msgs,
         title: titleFromMessages(msgs),
+        topic: input.topic?.trim() || list[idx].topic || inferTopic(msgs),
         updatedAt: now,
       };
       list[idx] = next;
@@ -97,6 +115,7 @@ export function upsertChatSession(input: {
   const session: ChatSession = {
     id: input.id || uid(),
     title: titleFromMessages(msgs),
+    topic: inferTopic(msgs, input.topic),
     messages: msgs,
     createdAt: now,
     updatedAt: now,
