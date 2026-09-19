@@ -43,23 +43,32 @@ function ZoomableImage({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-3"
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-3"
           onClick={() => setOpen(false)}
         >
-          <button
-            type="button"
-            className="absolute end-3 top-3 rounded-full bg-white/90 px-3 py-1 text-sm text-ink"
-            onClick={() => setOpen(false)}
-          >
-            بستن
-          </button>
-          <img
-            src={src}
-            alt={alt}
-            className="max-h-[92dvh] max-w-[96vw] object-contain"
+          <div
+            className="relative flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
-            referrerPolicy="no-referrer"
-          />
+          >
+            <div className="flex items-center justify-between border-b border-border/40 px-3 py-2">
+              <p className="truncate text-sm font-medium text-ink">{alt}</p>
+              <button
+                type="button"
+                className="rounded-full bg-stage px-3 py-1 text-sm text-cream"
+                onClick={() => setOpen(false)}
+              >
+                بستن
+              </button>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-white p-3">
+              <img
+                src={src}
+                alt={alt}
+                className="max-h-[80dvh] w-auto max-w-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
         </div>
       ) : null}
     </>
