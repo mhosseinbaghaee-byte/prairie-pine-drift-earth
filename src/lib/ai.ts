@@ -41,9 +41,9 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
 type ProviderId = "openai" | "gemini";
 
-// مدل‌های واقعی و در دسترس — اول نسخه پایدار برای صرفه‌جویی
-const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest"];
-/** ترتیب صرفه‌جویی: Gemini → لیارا/OpenAI → محلی(بانک) */
+// فقط ۲ مدل پایدار — تایم‌اوت کوتاه تا اگر Gemini قطع بود سریع برود لیارا
+const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
+/** ترتیب: Gemini (سریع fail) → لیارا/OpenAI → محلی */
 const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai"];
 
 function levelLine(level: Level) {
@@ -209,7 +209,8 @@ async function callGemini(
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), imageDataUrl ? 40000 : 14000);
+      // تایم‌اوت کوتاه: اگر Gemini قطع بود زود برو لیارا (قبلاً ۴×۱۴ثانیه کل تابع را می‌کشت)
+      const timeout = setTimeout(() => controller.abort(), imageDataUrl ? 12000 : 6000);
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,6 +222,9 @@ async function callGemini(
         signal: controller.signal,
       });
       clearTimeout(timeout);
+      if (res.status === 401 || res.status === 403) {
+        return { ok: false, error: `gemini_auth_${res.status}` };
+      }
       if (!res.ok) continue;
       const json = (await res.json()) as {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -272,7 +276,6 @@ export const askPouya = createServerFn({ method: "POST" })
     try {
       const short = data.mode === "live" || data.mode === "language";
       const hasImage = Boolean(data.image && parseDataUrl(data.image));
-      // مغز واقعی: اول Gemini، بعد لیارا/OpenAI
       const result = await chatComplete(
         systemPrompt(data.level, data.mode, data.lang, data.assistantId, hasImage, data.learningBrief),
         data.messages,
@@ -282,11 +285,9 @@ export const askPouya = createServerFn({ method: "POST" })
       if (result.ok) {
         let text = sanitizeStudentMath(result.text, data.level);
         const lastUser = [...data.messages].reverse().find((m) => m.role === "user")?.content || "";
-        // اگر مدل شکل نگذاشت و در بانک بود، فقط به‌عنوان کمک بصری بچسبان
         text = attachDiagramIfUseful(lastUser, text);
         return { ok: true as const, text, provider: result.provider };
       }
-      // آخرین امید: محلی + بانک شکل
       const fallback = localTutorReply({
         messages: data.messages,
         mode: data.mode === "language" ? "live" : data.mode,
