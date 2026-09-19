@@ -14,7 +14,7 @@ export function PouyaVoiceCall({
   setDraft,
   onClose,
   onToggleMute,
-  onSend,
+  onSendText,
 }: {
   phase: VoicePhase;
   muted: boolean;
@@ -24,7 +24,7 @@ export function PouyaVoiceCall({
   setDraft: (v: string) => void;
   onClose: () => void;
   onToggleMute: () => void;
-  onSend: (text: string) => void;
+  onSendText: (text: string) => void;
 }) {
   const caption =
     muted
@@ -106,7 +106,7 @@ export function PouyaVoiceCall({
               e.preventDefault();
               const t = draft.trim();
               if (!t) return;
-              onSend(t);
+              onSendText(t);
             }}
           >
             <Textarea
@@ -117,7 +117,7 @@ export function PouyaVoiceCall({
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   const t = draft.trim();
-                  if (t) onSend(t);
+                  if (t) onSendText(t);
                 }
               }}
               placeholder="تایپ کن و بفرست…"

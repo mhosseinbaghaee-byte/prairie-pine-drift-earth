@@ -7,7 +7,7 @@ import { diagramTag, matchDiagram } from "./lesson-diagrams";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
-  content: z.string().min(1).max(6000),
+  content: z.string().min(1).max(12000),
 });
 
 const ChatInput = z.object({
@@ -41,8 +41,16 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
 type ProviderId = "openai" | "gemini";
 
-// فقط ۲ مدل پایدار — تایم‌اوت کوتاه تا اگر Gemini قطع بود سریع برود لیارا
-const GEMINI_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
+// مدل‌های Gemini از env (GEMINI_MODELS، جداشده با کاما) خوانده می‌شود؛ مدل‌های ۲.۰ و ۱.۵ خاموش شده‌اند.
+const DEFAULT_GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash"];
+function geminiModels(): string[] {
+  const raw = process.env.GEMINI_MODELS;
+  const list = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  return list.length ? list : DEFAULT_GEMINI_MODELS;
+}
+function logAi(...args: unknown[]) {
+  console.error("[pouya-ai]", ...args);
+}
 /** ترتیب: Gemini (سریع fail) → لیارا/OpenAI → محلی */
 const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai"];
 
@@ -148,9 +156,15 @@ async function callOpenAI(
   imageDataUrl?: string,
 ): Promise<ChatResult> {
   const key = process.env.OPENAI_API_KEY;
-  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
+  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1")
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/chat\/completions$/, "");
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-  if (!key) return { ok: false, error: "no_openai_key" };
+  if (!key) {
+    logAi("openai: OPENAI_API_KEY missing");
+    return { ok: false, error: "no_openai_key" };
+  }
   const messages: { role: string; content: OpenAIContent }[] = [{ role: "system", content: system }];
   const lastIdx = history.length - 1;
   for (let i = 0; i < history.length; i++) {
@@ -177,13 +191,21 @@ async function callOpenAI(
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) return { ok: false, error: `openai_${res.status}` };
+    if (!res.ok) {
+      const body = (await res.text().catch(() => "")).slice(0, 300);
+      logAi("openai http", res.status, model, body);
+      return { ok: false, error: `openai_${res.status}` };
+    }
     const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const text = json.choices?.[0]?.message?.content?.trim();
-    if (!text) return { ok: false, error: "openai_empty" };
+    if (!text) {
+      logAi("openai empty response", model);
+      return { ok: false, error: "openai_empty" };
+    }
     return { ok: true, text, provider: "openai" };
-  } catch {
+  } catch (err) {
     clearTimeout(timeout);
+    logAi("openai exception", err instanceof Error ? err.message : String(err));
     return { ok: false, error: "openai_fail" };
   }
 }
@@ -195,7 +217,10 @@ async function callGemini(
   imageDataUrl?: string,
 ): Promise<ChatResult> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return { ok: false, error: "no_gemini_key" };
+  if (!key) {
+    logAi("gemini: GEMINI_API_KEY missing");
+    return { ok: false, error: "no_gemini_key" };
+  }
   const parsed = imageDataUrl ? parseDataUrl(imageDataUrl) : null;
   const contents = history.map((m, i) => {
     const role = m.role === "assistant" ? "model" : "user";
@@ -205,15 +230,22 @@ async function callGemini(
     }
     return { role, parts };
   });
-  for (const model of GEMINI_MODELS) {
+  // Gemini باید با نقش user شروع شود
+  while (contents.length > 1 && contents[0].role === "model") contents.shift();
+  const deadline = Date.now() + (imageDataUrl ? 20000 : 9000);
+  for (const model of geminiModels()) {
+    if (Date.now() > deadline) {
+      logAi("gemini: deadline reached, skipping remaining models");
+      break;
+    }
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
       const controller = new AbortController();
       // تایم‌اوت کوتاه: اگر Gemini قطع بود زود برو لیارا (قبلاً ۴×۱۴ثانیه کل تابع را می‌کشت)
       const timeout = setTimeout(() => controller.abort(), imageDataUrl ? 12000 : 6000);
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents,
@@ -223,16 +255,23 @@ async function callGemini(
       });
       clearTimeout(timeout);
       if (res.status === 401 || res.status === 403) {
+        const body = (await res.text().catch(() => "")).slice(0, 300);
+        logAi("gemini auth error", res.status, model, body);
         return { ok: false, error: `gemini_auth_${res.status}` };
       }
-      if (!res.ok) continue;
+      if (!res.ok) {
+        const body = (await res.text().catch(() => "")).slice(0, 300);
+        logAi("gemini http", res.status, model, body);
+        continue;
+      }
       const json = (await res.json()) as {
         candidates?: { content?: { parts?: { text?: string }[] } }[];
       };
       const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim();
       if (text) return { ok: true, text, provider: `gemini:${model}` };
-    } catch {
-      /* next model or Liara */
+      logAi("gemini empty response", model);
+    } catch (err) {
+      logAi("gemini exception", model, err instanceof Error ? err.message : String(err));
     }
   }
   return { ok: false, error: "gemini_fail" };
@@ -258,7 +297,9 @@ async function chatComplete(
         ? await callOpenAI(system, history, maxTokens, imageDataUrl)
         : await callGemini(system, history, maxTokens, imageDataUrl);
     if (r.ok) return r;
+    logAi("provider failed:", p, r.error);
   }
+  logAi("all providers failed, order =", providerOrder().join(","));
   return { ok: false, error: "all_providers_failed" };
 }
 
@@ -340,7 +381,7 @@ export const dailyFact = createServerFn({ method: "POST" })
   .validator((input: unknown) => FactInput.parse(input))
   .handler(async ({ data }) => {
     try {
-      return { ok: true as const, text: todayFact(data.level) };
+      return { ok: true as const, text: todayFact() };
     } catch {
       return { ok: false as const, error: "unavailable" };
     }
