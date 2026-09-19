@@ -75,12 +75,44 @@ function ShapeSvg({ kind }: { kind: string }) {
 function DiagramBlock({ id }: { id: string }) {
   const meta = diagramById(id.trim().toLowerCase());
   const svg = <LessonDiagramSvg id={id} />;
-  if (!svg) return null;
+  const gallery = meta?.imageGallery?.filter((g) => g.url) || [];
+  const single = meta?.imageUrl;
+
+  if (!svg && !single && gallery.length === 0) return null;
+
   return (
-    <figure className="my-2 space-y-1">
-      {svg}
+    <figure className="my-2 space-y-2">
+      {gallery.length > 0 ? (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {gallery.map((g) => (
+            <div key={g.url} className="overflow-hidden rounded-xl border border-border/40 bg-white">
+              <img
+                src={g.url}
+                alt={g.label}
+                className="mx-auto max-h-40 w-full object-contain"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+              <p className="border-t border-border/30 px-1 py-1 text-center text-[11px] text-fg-muted">{g.label}</p>
+            </div>
+          ))}
+        </div>
+      ) : single ? (
+        <img
+          src={single}
+          alt={meta?.title || id}
+          className="mx-auto max-h-56 w-auto max-w-full rounded-xl border border-border/40 bg-white object-contain"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        svg
+      )}
       {meta?.caption ? (
         <figcaption className="text-center text-[11px] text-muted">{meta.caption}</figcaption>
+      ) : null}
+      {meta?.attribution ? (
+        <figcaption className="text-center text-[10px] text-fg-subtle">{meta.attribution}</figcaption>
       ) : null}
     </figure>
   );

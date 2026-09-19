@@ -1,7 +1,6 @@
 /**
  * بانک شکل‌های آموزشی پویا — فاز ۱
- * شکل‌ها SVG آموزشی اصلی هستند (کپی اسکن کتاب درسی نیستند).
- * هم‌راستا با مباحث پرتکرار کتاب‌های رسمی؛ قابل گسترش مرحله‌به‌مرحله.
+ * SVG + در صورت وجود تصویر آزاد ویکی‌مدیا کامنز
  */
 
 export type LessonDiagram = {
@@ -11,6 +10,12 @@ export type LessonDiagram = {
   grades: string;
   keywords: string[];
   caption: string;
+  /** تصویر آموزشی از ویکی‌مدیا کامنز (اختیاری) */
+  imageUrl?: string;
+  /** چند تصویر کنار هم (مثلاً سه نوع ماهیچه) */
+  imageGallery?: { url: string; label: string }[];
+  /** ذکر منبع آزاد — الزامی وقتی imageUrl/gallery هست */
+  attribution?: string;
 };
 
 export const LESSON_DIAGRAMS: LessonDiagram[] = [
@@ -21,6 +26,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "یازدهم",
     keywords: ["نورون", "neuron", "دندریت", "آکسون", "یاخته عصبی", "سلول عصبی"],
     caption: "دندریت پیام را می‌گیرد → جسم یاخته‌ای → آکسون پیام را می‌فرستد.",
+    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Neuron_Hand-tuned.svg?width=640",
+    attribution: "منبع: ویکی‌مدیا کامنز — طرح نورون (آزاد)",
   },
   {
     id: "reflex",
@@ -69,6 +76,21 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
       "صفحات بینابینی",
     ],
     caption: "اسکلتی (مخطط، چند هسته) · قلبی (مخطط، انشعاب) · صاف (دوکی، یک هسته).",
+    imageGallery: [
+      {
+        url: "https://commons.wikimedia.org/wiki/Special:FilePath/Blausen_0801_SkeletalMuscle.png?width=640",
+        label: "اسکلتی (ارادی) — طرح رنگی",
+      },
+      {
+        url: "https://commons.wikimedia.org/wiki/Special:FilePath/Histology_of_cardiac_muscle.jpg?width=640",
+        label: "قلبی — زیر میکروسکوپ",
+      },
+      {
+        url: "https://commons.wikimedia.org/wiki/Special:FilePath/Histology_of_smooth_muscle.jpg?width=640",
+        label: "صاف — زیر میکروسکوپ",
+      },
+    ],
+    attribution: "منبع تصاویر: ویکی‌مدیا کامنز (آزاد) — Blausen Medical و بافت‌شناسی آموزشی",
   },
   {
     id: "photosynthesis",
