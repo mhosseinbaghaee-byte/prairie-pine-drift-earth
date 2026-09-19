@@ -1,6 +1,6 @@
 /**
  * بانک شکل‌های آموزشی پویا
- * SVG + تصویر آزاد ویکی‌مدیا کامنز (با ذکر منبع)
+ * اولویت: تصویر رنگی ویکی‌مدیا کامنز + ذکر منبع؛ در نبود تصویر → SVG داخلی
  */
 
 export type LessonDiagram = {
@@ -15,6 +15,9 @@ export type LessonDiagram = {
   attribution?: string;
 };
 
+const WM = (file: string, width = 700) =>
+  `https://commons.wikimedia.org/wiki/Special:FilePath/${file}?width=${width}`;
+
 export const LESSON_DIAGRAMS: LessonDiagram[] = [
   {
     id: "neuron",
@@ -23,8 +26,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "یازدهم",
     keywords: ["نورون", "neuron", "دندریت", "آکسون", "یاخته عصبی", "سلول عصبی"],
     caption: "دندریت پیام را می‌گیرد → جسم یاخته‌ای → آکسون پیام را می‌فرستد.",
-    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Neuron_Hand-tuned.svg?width=640",
-    attribution: "منبع: ویکی‌مدیا کامنز — طرح نورون (آزاد)",
+    imageUrl: WM("Neuron_Hand-tuned.svg", 640),
+    attribution: "ویکی‌مدیا کامنز — طرح نورون",
   },
   {
     id: "reflex",
@@ -33,6 +36,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "یازدهم",
     keywords: ["رفلکس", "پاسخ انعکاسی", "نخاع", "گیرنده", "تنظیم عصبی"],
     caption: "گیرنده → عصب حسی → نخاع → عصب حرکتی → ماهیچه.",
+    imageUrl: WM("Reflex_arc.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — قوس بازتابی",
   },
   {
     id: "cell",
@@ -41,6 +46,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "دهم",
     keywords: ["سلول جانوری", "یاخته جانوری", "غشا سیتوپلاسم", "animal cell"],
     caption: "غشا، سیتوپلاسم و هسته — سه بخش اصلی سلول جانوری.",
+    imageUrl: WM("Animal_cell_structure.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — ساختار سلول جانوری",
   },
   {
     id: "plant_cell",
@@ -49,6 +56,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "دهم",
     keywords: ["سلول گیاهی", "دیواره سلولی", "کلروپلاست", "واکوئل"],
     caption: "دیواره سلولی، کلروپلاست و واکوئل بزرگ از ویژگی‌های سلول گیاهی‌اند.",
+    imageUrl: WM("Plant_cell_structure-en.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — ساختار سلول گیاهی",
   },
   {
     id: "muscle_types",
@@ -74,20 +83,11 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     ],
     caption: "اسکلتی (مخطط، چند هسته) · قلبی (مخطط، انشعاب) · صاف (دوکی، یک هسته).",
     imageGallery: [
-      {
-        url: "https://commons.wikimedia.org/wiki/Special:FilePath/Blausen_0801_SkeletalMuscle.png?width=640",
-        label: "اسکلتی (ارادی) — طرح رنگی",
-      },
-      {
-        url: "https://commons.wikimedia.org/wiki/Special:FilePath/Histology_of_cardiac_muscle.jpg?width=640",
-        label: "قلبی — زیر میکروسکوپ",
-      },
-      {
-        url: "https://commons.wikimedia.org/wiki/Special:FilePath/Histology_of_smooth_muscle.jpg?width=640",
-        label: "صاف — زیر میکروسکوپ",
-      },
+      { url: WM("Blausen_0801_SkeletalMuscle.png", 640), label: "اسکلتی (ارادی)" },
+      { url: WM("Histology_of_cardiac_muscle.jpg", 640), label: "قلبی" },
+      { url: WM("Histology_of_smooth_muscle.jpg", 640), label: "صاف" },
     ],
-    attribution: "منبع تصاویر: ویکی‌مدیا کامنز (آزاد) — Blausen Medical و بافت‌شناسی آموزشی",
+    attribution: "ویکی‌مدیا کامنز — Blausen و بافت‌شناسی آموزشی",
   },
   {
     id: "periodic_table",
@@ -107,8 +107,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
       "گاز نجیب",
     ],
     caption: "عناصر بر اساس عدد اتمی در دوره‌ها (سطر) و گروه‌ها (ستون) چیده شده‌اند.",
-    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Periodic_table_large.svg?width=960",
-    attribution: "منبع: ویکی‌مدیا کامنز — جدول تناوبی (آزاد)",
+    imageUrl: WM("Periodic_table_large.svg", 960),
+    attribution: "ویکی‌مدیا کامنز — جدول تناوبی",
   },
   {
     id: "water_molecule",
@@ -117,8 +117,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "ششم تا دهم",
     keywords: ["مولکول آب", "اتم آب", "H2O", "H₂O", "آب مولکول", "water molecule"],
     caption: "هر مولکول آب از دو اتم هیدروژن و یک اتم اکسیژن ساخته شده (H₂O).",
-    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Water-3D-balls.png?width=640",
-    attribution: "منبع: ویکی‌مدیا کامنز — مدل مولکول آب",
+    imageUrl: WM("Water-3D-balls.png", 640),
+    attribution: "ویکی‌مدیا کامنز — مدل مولکول آب",
   },
   {
     id: "gold_atom",
@@ -127,8 +127,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "نهم تا دوازدهم",
     keywords: ["اتم طلا", "طلا", "gold atom", "آرایش الکترونی طلا", "عنصر طلا"],
     caption: "طلا عنصر با عدد اتمی ۷۹؛ لایه‌های الکترونی در تصویر دیده می‌شود.",
-    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Electron_shell_079_gold.png?width=640",
-    attribution: "منبع: ویکی‌مدیا کامنز — لایه الکترونی طلا",
+    imageUrl: WM("Electron_shell_079_gold.png", 640),
+    attribution: "ویکی‌مدیا کامنز — لایه الکترونی طلا",
   },
   {
     id: "mercury_atom",
@@ -137,8 +137,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "نهم تا دوازدهم",
     keywords: ["اتم جیوه", "جیوه", "mercury", "آرایش الکترونی جیوه", "عنصر جیوه"],
     caption: "جیوه فلز مایع در دمای اتاق؛ عدد اتمی ۸۰.",
-    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Electron_shell_080_mercury.png?width=640",
-    attribution: "منبع: ویکی‌مدیا کامنز — لایه الکترونی جیوه",
+    imageUrl: WM("Electron_shell_080_mercury.png", 640),
+    attribution: "ویکی‌مدیا کامنز — لایه الکترونی جیوه",
   },
   {
     id: "mercury_element",
@@ -147,8 +147,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "هشتم تا دهم",
     keywords: ["جیوه مایع", "فلز مایع", "liquid mercury"],
     caption: "جیوه تنها فلزی است که در دمای اتاق مایع است.",
-    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/Pouring_liquid_mercury_bionerd.jpg?width=640",
-    attribution: "منبع: ویکی‌مدیا کامنز — تصویر جیوه مایع",
+    imageUrl: WM("Pouring_liquid_mercury_bionerd.jpg", 640),
+    attribution: "ویکی‌مدیا کامنز — تصویر جیوه مایع",
   },
   {
     id: "earth_map",
@@ -157,8 +157,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "چهارم تا نهم",
     keywords: ["نقشه جهان", "نقشه زمین", "قاره", "اقیانوس", "جغرافیا نقشه", "world map"],
     caption: "نقشه جهان برای شناخت قاره‌ها و اقیانوس‌ها.",
-    imageUrl: "https://commons.wikimedia.org/wiki/Special:FilePath/World_map_blank_without_borders.svg?width=900",
-    attribution: "منبع: ویکی‌مدیا کامنز — نقشه جهان",
+    imageUrl: WM("World_map_blank_without_borders.svg", 900),
+    attribution: "ویکی‌مدیا کامنز — نقشه جهان",
   },
   {
     id: "photosynthesis",
@@ -167,14 +167,18 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "ششم تا دهم",
     keywords: ["فتوسنتز", "کلروفیل", "غذاسازی گیاه", "photosynthesis"],
     caption: "نور + آب + CO₂ → قند + اکسیژن (در کلروپلاست).",
+    imageUrl: WM("Photosynthesis_equation.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — معادله فتوسنتز",
   },
   {
     id: "atom",
     title: "مدل ساده اتم",
     subject: "شیمی / علوم",
     grades: "هشتم تا دهم",
-    keywords: ["مدل اتم", "پروتون نوترون الکترون", "هسته اتم", "atom model"],
+    keywords: ["مدل اتم", "مدل بور", "پروتون نوترون الکترون", "هسته اتم", "atom model", "Bohr"],
     caption: "هسته (پروتون و نوترون) + الکترون در اطراف.",
+    imageUrl: WM("Bohr_atom_model.svg", 640),
+    attribution: "ویکی‌مدیا کامنز — مدل بور اتم",
   },
   {
     id: "heart",
@@ -183,6 +187,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "هشتم / دهم",
     keywords: ["قلب", "دهلیز", "بطن", "گردش خون"],
     caption: "دو دهلیز بالا و دو بطن پایین؛ خون را در بدن به گردش درمی‌آورد.",
+    imageUrl: WM("Heart_diagram_blood_flow_en.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — نمودار قلب و جریان خون",
   },
   {
     id: "digestive",
@@ -191,6 +197,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "هشتم / دهم",
     keywords: ["گوارش", "معده", "روده", "مری", "دستگاه گوارش"],
     caption: "دهان → مری → معده → روده باریک → روده بزرگ.",
+    imageUrl: WM("Digestive_system_diagram_en.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — دستگاه گوارش",
   },
   {
     id: "water_cycle",
@@ -199,6 +207,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "چهارم تا هفتم",
     keywords: ["چرخه آب", "تبخیر", "بارش", "میعان"],
     caption: "تبخیر → میعان → بارش → جریان روی زمین.",
+    imageUrl: WM("Water_cycle.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — چرخه آب",
   },
   {
     id: "fraction",
@@ -207,6 +217,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "سوم تا ششم",
     keywords: ["کسر", "صورت کسر", "مخرج", "fraction"],
     caption: "کسر یعنی قسمت رنگی نسبت به کل شکل.",
+    imageUrl: WM("Circle_Area.svg", 500),
+    attribution: "ویکی‌مدیا کامنز — شکل کمکی کسر / مساحت",
   },
   {
     id: "triangle_types",
@@ -221,16 +233,20 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     title: "موج ساده",
     subject: "فیزیک",
     grades: "هشتم / یازدهم",
-    keywords: ["موج", "طول موج", "دامنه", "فرکانس"],
+    keywords: ["موج", "طول موج", "دامنه", "فرکانس", "موج سینوسی"],
     caption: "دامنه ارتفاع موج و طول موج فاصلهٔ دو قلهٔ پشت‌سرهم است.",
+    imageUrl: WM("Sine_wave.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — موج سینوسی",
   },
   {
     id: "circuit",
     title: "مدار ساده",
     subject: "فیزیک",
     grades: "هشتم / نهم",
-    keywords: ["مدار", "مقاومت", "باتری", "جریان الکتریکی"],
+    keywords: ["مدار", "مقاومت", "باتری", "جریان الکتریکی", "مدار سری"],
     caption: "باتری، کلید، لامپ و سیم یک مدار ساده می‌سازند.",
+    imageUrl: WM("Basic_electric_circuit.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — مدار الکتریکی ساده",
   },
   {
     id: "dna",
@@ -239,6 +255,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "دوازدهم",
     keywords: ["DNA", "دی‌ان‌ای", "مارپیچ دوگانه", "ژنتیک"],
     caption: "دو رشتهٔ مارپیچ با بازهای مکمل.",
+    imageUrl: WM("DNA_Structure%2BKey%2BLabelled.pn_NoBB.png", 700),
+    attribution: "ویکی‌مدیا کامنز — ساختار DNA",
   },
   {
     id: "earth_layers",
@@ -247,6 +265,8 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
     grades: "پنجم تا هشتم",
     keywords: ["لایه‌های زمین", "هسته زمین", "گوشته", "پوسته زمین"],
     caption: "پوسته → گوشته → هسته خارجی → هسته داخلی.",
+    imageUrl: WM("Earth_cutaway_schematic-en.svg", 700),
+    attribution: "ویکی‌مدیا کامنز — برش لایه‌های زمین",
   },
 ];
 
