@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { askPouya, speakPouya, type ChatMode } from "@/lib/ai";
+import { learningBriefForPrompt, noteInteraction } from "@/lib/learning-memory";
 import { localTutorReply } from "@/lib/library";
 import {
   LEVELS,
@@ -152,18 +153,9 @@ export function PouyaMainApp() {
         setMood("talk");
         if (voiceCallRef.current) setVoicePhase("talk");
         await new Promise<void>((resolve) => {
-          audio.onended = () => {
-            finish();
-            resolve();
-          };
-          audio.onerror = () => {
-            finish();
-            resolve();
-          };
-          void audio.play().catch(() => {
-            finish();
-            resolve();
-          });
+          audio.onended = () => { finish(); resolve(); };
+          audio.onerror = () => { finish(); resolve(); };
+          void audio.play().catch(() => { finish(); resolve(); });
         });
         return;
       }
@@ -177,14 +169,8 @@ export function PouyaMainApp() {
     utter.rate = 0.95;
     utter.pitch = 0.9;
     await new Promise<void>((resolve) => {
-      utter.onend = () => {
-        finish();
-        resolve();
-      };
-      utter.onerror = () => {
-        finish();
-        resolve();
-      };
+      utter.onend = () => { finish(); resolve(); };
+      utter.onerror = () => { finish(); resolve(); };
       voiceActiveRef.current = true;
       setMood("talk");
       if (voiceCallRef.current) setVoicePhase("talk");
@@ -213,9 +199,7 @@ export function PouyaMainApp() {
         const b64 = attachment.dataUrl.split(",")[1] || "";
         const decoded = atob(b64);
         if (decoded) content = `${content}\n\n--- ${attachment.name} ---\n${decoded.slice(0, 6000)}`;
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }
     const userMsg: ChatMsg = {
       role: "user",
@@ -238,6 +222,7 @@ export function PouyaMainApp() {
           mode: nextMode,
           lang: nextMode === "live" ? useLang : undefined,
           assistantId,
+          learningBrief: learningBriefForPrompt(),
         },
       });
       const reply =
@@ -247,6 +232,7 @@ export function PouyaMainApp() {
       setMood("talk");
       if (nextMode !== "live") void playVoice(reply);
       setMessages([...history, { role: "assistant", content: reply }]);
+      try { noteInteraction({ userText: content, kind: "ask" }); } catch { /* ignore */ }
       setTyped("");
       if (!voiceActiveRef.current) setMood("idle");
     } catch {
@@ -306,26 +292,15 @@ export function PouyaMainApp() {
   })();
 
   function stopMic() {
-    try {
-      recRef.current?.stop();
-    } catch {
-      /* ignore */
-    }
+    try { recRef.current?.stop(); } catch { /* ignore */ }
     recRef.current = null;
     setListening(false);
   }
 
   function toggleMic(forMode: ChatMode = mode) {
     const SR = getSpeechRecognition();
-    if (!SR) {
-      toast.error("برای میکروفون از Chrome یا Edge استفاده کن.");
-      return;
-    }
-    if (listening) {
-      stopMic();
-      setMood("idle");
-      return;
-    }
+    if (!SR) { toast.error("برای میکروفون از Chrome یا Edge استفاده کن."); return; }
+    if (listening) { stopMic(); setMood("idle"); return; }
     if (busy) return;
     const rec = new SR();
     rec.lang = forMode === "live" ? localeForLangCode(lang) : "fa-IR";
@@ -335,16 +310,8 @@ export function PouyaMainApp() {
       const said = (ev.results[0]?.[0]?.transcript || "").trim();
       if (said) void send(said, forMode === "live" ? "live" : "chat");
     };
-    rec.onend = () => {
-      setListening(false);
-      recRef.current = null;
-      if (!busy && !voiceActiveRef.current) setMood("idle");
-    };
-    rec.onerror = () => {
-      setListening(false);
-      recRef.current = null;
-      setMood("idle");
-    };
+    rec.onend = () => { setListening(false); recRef.current = null; if (!busy && !voiceActiveRef.current) setMood("idle"); };
+    rec.onerror = () => { setListening(false); recRef.current = null; setMood("idle"); };
     recRef.current = rec;
     setListening(true);
     setMood("listen");
@@ -379,11 +346,7 @@ export function PouyaMainApp() {
         window.setTimeout(() => startCallListen(), 280);
       }
     };
-    rec.onerror = () => {
-      setListening(false);
-      recRef.current = null;
-      if (voiceCallRef.current) setVoicePhase("idle");
-    };
+    rec.onerror = () => { setListening(false); recRef.current = null; if (voiceCallRef.current) setVoicePhase("idle"); };
     recRef.current = rec;
     setListening(true);
     setMood("listen");
@@ -411,13 +374,14 @@ export function PouyaMainApp() {
     setVoicePhase("think");
     try {
       const res = await askPouya({
-        data: { messages: history.slice(-12), level, mode: "chat", assistantId },
+        data: { messages: history.slice(-12), level, mode: "chat", assistantId, learningBrief: learningBriefForPrompt() },
       });
       const reply =
         res && typeof res === "object" && "ok" in res && res.ok && "text" in res && typeof res.text === "string"
           ? res.text
           : localTutorReply({ messages: history.slice(-12), mode: "chat" });
       setMessages([...history, { role: "assistant", content: reply }]);
+      try { noteInteraction({ userText: content, kind: "ask" }); } catch { /* ignore */ }
       setMood("talk");
       setVoicePhase("talk");
       await playVoice(reply);
@@ -476,10 +440,7 @@ export function PouyaMainApp() {
 
   function saveLast(folder: FolderId = "knowledge") {
     const last = [...messages].reverse().find((m) => m.role === "assistant");
-    if (!last) {
-      toast.error("هنوز پاسخی برای ذخیره نیست.");
-      return;
-    }
+    if (!last) { toast.error("هنوز پاسخی برای ذخیره نیست."); return; }
     saveNote({ folder, title: titleFromBody(last.content), body: last.content, source: "chat" });
     toast.success("در مغز دوم ذخیره شد.");
   }
@@ -493,68 +454,21 @@ export function PouyaMainApp() {
 
   if (!introDone) {
     return (
-      <button
-        type="button"
-        className="relative flex min-h-dvh w-full items-center justify-center bg-stage"
-        onClick={() => {
-          sessionStorage.setItem(INTRO_KEY, "1");
-          setIntroDone(true);
-        }}
-        aria-label="ورود به پویا"
-      >
+      <button type="button" className="relative flex min-h-dvh w-full items-center justify-center bg-stage" onClick={() => { sessionStorage.setItem(INTRO_KEY, "1"); setIntroDone(true); }} aria-label="ورود به پویا">
         <div className="relative aspect-[9/16] h-[min(100dvh,100svh)] w-auto max-w-[100vw] overflow-hidden bg-stage">
           <PouyaStage mood="intro" caption={"سلام من پویا هستم\nمربی زنده دانش و زبان"} immersive showCaption />
-          <p className="pointer-events-none absolute inset-x-0 bottom-[6%] text-center text-xs text-cream/80">
-            برای ادامه لمس کن
-          </p>
+          <p className="pointer-events-none absolute inset-x-0 bottom-[6%] text-center text-xs text-cream/80">برای ادامه لمس کن</p>
         </div>
       </button>
     );
   }
 
   return (
-    <div
-      className={cn(
-        "flex min-h-dvh w-full min-w-0 flex-col overflow-x-hidden text-fg",
-        redShell ? "bg-stage" : "bg-background",
-      )}
-      dir="rtl"
-    >
-      <header
-        className={cn(
-          "flex w-full shrink-0 flex-col gap-2 px-3 pt-[max(0.55rem,env(safe-area-inset-top))] pb-2 sm:px-4",
-          redShell
-            ? "border-b border-white/10 bg-stage-deep/30 backdrop-blur-md"
-            : "border-b border-border bg-card/80 backdrop-blur-md",
-        )}
-      >
+    <div className={cn("flex min-h-dvh w-full min-w-0 flex-col overflow-x-hidden text-fg", redShell ? "bg-stage" : "bg-background")} dir="rtl">
+      <header className={cn("flex w-full shrink-0 flex-col gap-2 px-3 pt-[max(0.55rem,env(safe-area-inset-top))] pb-2 sm:px-4", redShell ? "border-b border-white/10 bg-stage-deep/30 backdrop-blur-md" : "border-b border-border bg-card/80 backdrop-blur-md")}>
         <nav className={cn("pouya-glass-nav w-full min-w-0", redShell && "pouya-glass-nav-on-red")} aria-label="بخش‌ها">
-          {(
-            [
-              ["chat", "گفتگو", MessageCircle],
-              ["live", "زبان", Languages],
-              ["coaches", "مربی‌ها", BookOpen],
-              ["quiz", "آزمون", GraduationCap],
-              ["vault", "مغز دوم", Brain],
-              ["account", "حساب", Bookmark],
-            ] as const
-          ).map(([id, label, Icon]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                if (id !== "chat") {
-                  audioRef.current?.pause();
-                  window.speechSynthesis?.cancel();
-                  voiceActiveRef.current = false;
-                }
-                setTab(id);
-                if (id === "live") setMode("live");
-                else if (id === "chat") setMode("chat");
-              }}
-              className={cn("pouya-glass-tab", tab === id && "pouya-glass-tab-active")}
-              title={label}
-            >
+          {([["chat", "گفتگو", MessageCircle], ["live", "زبان", Languages], ["coaches", "مربی‌ها", BookOpen], ["quiz", "آزمون", GraduationCap], ["vault", "مغز دوم", Brain], ["account", "حساب", Bookmark]] as const).map(([id, label, Icon]) => (
+            <button key={id} type="button" onClick={() => { if (id !== "chat") { audioRef.current?.pause(); window.speechSynthesis?.cancel(); voiceActiveRef.current = false; } setTab(id); if (id === "live") setMode("live"); else if (id === "chat") setMode("chat"); }} className={cn("pouya-glass-tab", tab === id && "pouya-glass-tab-active")} title={label}>
               <Icon className="size-4 shrink-0" strokeWidth={tab === id ? 2 : 1.75} />
               <span className="sr-only">{label}</span>
             </button>
@@ -564,26 +478,12 @@ export function PouyaMainApp() {
           <div className="flex w-full min-w-0 items-center gap-2">
             <div className="flex min-w-0 flex-1 rounded-full border border-white/25 bg-white/15 p-0.5 backdrop-blur-md">
               {LEVELS.map((l) => (
-                <button
-                  key={l.id}
-                  type="button"
-                  title={l.hint}
-                  onClick={() => setLevel(l.id)}
-                  className={cn(
-                    "h-8 min-h-8 min-w-0 flex-1 rounded-full px-2 text-xs transition",
-                    level === l.id ? "bg-white text-ink" : "text-cream/85 hover:text-cream",
-                  )}
-                >
+                <button key={l.id} type="button" title={l.hint} onClick={() => setLevel(l.id)} className={cn("h-8 min-h-8 min-w-0 flex-1 rounded-full px-2 text-xs transition", level === l.id ? "bg-white text-ink" : "text-cream/85 hover:text-cream")}>
                   {l.label}
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => setVoiceOn(!voiceOn)}
-              className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-cream hover:bg-white/15"
-              aria-label={voiceOn ? "قطع صدا" : "روشن کردن صدا"}
-            >
+            <button type="button" onClick={() => setVoiceOn(!voiceOn)} className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-cream hover:bg-white/15" aria-label={voiceOn ? "قطع صدا" : "روشن کردن صدا"}>
               {voiceOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
             </button>
           </div>
@@ -593,55 +493,26 @@ export function PouyaMainApp() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {tab === "chat" ? (
           <ChatPane
-            messages={messages}
-            typed={typed}
-            busy={busy}
-            draft={draft}
-            setDraft={setDraft}
-            level={level}
-            setLevel={setLevel}
-            voiceOn={voiceOn}
-            setVoiceOn={setVoiceOn}
-            mode={mode}
-            listening={listening}
-            scrollerRef={scrollerRef}
+            messages={messages} typed={typed} busy={busy} draft={draft} setDraft={setDraft}
+            level={level} setLevel={setLevel} voiceOn={voiceOn} setVoiceOn={setVoiceOn} mode={mode}
+            listening={listening} scrollerRef={scrollerRef}
             onSend={(t, att) => void send(t, "chat", undefined, att)}
             onLesson={(t) => void send(t, "lesson")}
             onDaily={() => void send("مرور روزانه را شروع کن.", "daily")}
             onFact={() => void send("یک دانستی امروز بگو.", "chat")}
-            onLivePractice={openLivePractice}
-            onMic={() => toggleMic("chat")}
-            onVoiceCall={() => void openVoiceCall()}
-            onNew={newChat}
-            onSave={() => saveLast()}
-            historyItems={historyItems}
-            historyOpen={historyOpen}
-            setHistoryOpen={setHistoryOpen}
-            activeSessionId={sessionId}
-            onOpenHistoryItem={openHistorySession}
-            onDeleteHistoryItem={removeHistorySession}
+            onLivePractice={openLivePractice} onMic={() => toggleMic("chat")}
+            onVoiceCall={() => void openVoiceCall()} onNew={newChat} onSave={() => saveLast()}
+            historyItems={historyItems} historyOpen={historyOpen} setHistoryOpen={setHistoryOpen}
+            activeSessionId={sessionId} onOpenHistoryItem={openHistorySession} onDeleteHistoryItem={removeHistorySession}
           />
         ) : null}
         {tab === "live" ? (
           <LivePane
-            messages={messages}
-            typed={typed}
-            busy={busy}
-            draft={draft}
-            setDraft={setDraft}
-            level={level}
-            setLevel={setLevel}
-            voiceOn={voiceOn}
-            setVoiceOn={setVoiceOn}
-            lang={lang}
-            setLang={setLang}
-            listening={listening}
-            scrollerRef={scrollerRef}
-            onSend={(t) => void send(t, "live")}
-            onScenario={(p) => void send(p, "live", lang)}
-            onMic={() => toggleMic("live")}
-            onNew={newChat}
-            onSave={() => saveLast()}
+            messages={messages} typed={typed} busy={busy} draft={draft} setDraft={setDraft}
+            level={level} setLevel={setLevel} voiceOn={voiceOn} setVoiceOn={setVoiceOn}
+            lang={lang} setLang={setLang} listening={listening} scrollerRef={scrollerRef}
+            onSend={(t) => void send(t, "live")} onScenario={(p) => void send(p, "live", lang)}
+            onMic={() => toggleMic("live")} onNew={newChat} onSave={() => saveLast()}
           />
         ) : null}
         {tab === "quiz" ? <QuizPane level={level} setMood={setMood} /> : null}
@@ -650,17 +521,8 @@ export function PouyaMainApp() {
           <CoachesPane
             activeId={assistantId}
             onSelect={(a: Assistant) => setAssistantId(a.id)}
-            onStart={(a: Assistant) => {
-              setAssistantId(a.id);
-              setTab("chat");
-              setMode("chat");
-              void send(a.starter, "lesson");
-            }}
-            onAskLesson={(prompt) => {
-              setTab("chat");
-              setMode("lesson");
-              void send(prompt, "lesson");
-            }}
+            onStart={(a: Assistant) => { setAssistantId(a.id); setTab("chat"); setMode("chat"); void send(a.starter, "lesson"); }}
+            onAskLesson={(prompt) => { setTab("chat"); setMode("lesson"); void send(prompt, "lesson"); }}
           />
         ) : null}
         {tab === "account" ? <AccountPane /> : null}
@@ -668,14 +530,11 @@ export function PouyaMainApp() {
 
       {voiceCall ? (
         <PouyaVoiceCall
-          phase={voicePhase}
-          muted={callMuted}
+          phase={voicePhase} muted={callMuted}
           lastUser={[...messages].reverse().find((m) => m.role === "user")?.content}
           lastAssistant={[...messages].reverse().find((m) => m.role === "assistant")?.content}
-          draft={draft}
-          setDraft={setDraft}
-          onClose={closeVoiceCall}
-          onToggleMute={toggleCallMute}
+          draft={draft} setDraft={setDraft}
+          onClose={closeVoiceCall} onToggleMute={toggleCallMute}
           onSendText={(t) => void sendVoice(t)}
         />
       ) : null}
