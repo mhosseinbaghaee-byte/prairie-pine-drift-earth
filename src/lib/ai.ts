@@ -155,12 +155,12 @@ async function callOpenAI(
   maxTokens: number,
   imageDataUrl?: string,
 ): Promise<ChatResult> {
-  const key = process.env.OPENAI_API_KEY;
-  const baseUrl = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1")
+  const key = process.env.LIARA_API_KEY || process.env.OPENAI_API_KEY;
+  const baseUrl = (process.env.LIARA_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1")
     .trim()
     .replace(/\/+$/, "")
     .replace(/\/chat\/completions$/, "");
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const model = process.env.LIARA_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
   if (!key) {
     logAi("openai: OPENAI_API_KEY missing");
     return { ok: false, error: "no_openai_key" };
@@ -356,22 +356,36 @@ export const speakPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => SpeakInput.parse(input))
   .handler(async ({ data }) => {
     try {
-      const key = process.env.OPENAI_TTS_KEY || process.env.OPENAI_API_KEY;
-      const baseUrl = (process.env.OPENAI_TTS_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(
-        /\/$/,
-        "",
-      );
-      const model = process.env.OPENAI_TTS_MODEL || "tts-1";
-      const voice = process.env.OPENAI_TTS_VOICE || "echo";
+      const key = process.env.LIARA_TTS_API_KEY || process.env.LIARA_API_KEY || process.env.OPENAI_TTS_KEY || process.env.OPENAI_API_KEY;
+      const baseUrl = (
+        process.env.LIARA_TTS_BASE_URL ||
+        process.env.LIARA_BASE_URL ||
+        process.env.OPENAI_TTS_BASE_URL ||
+        process.env.OPENAI_BASE_URL ||
+        "https://api.openai.com/v1"
+      ).replace(/\/$/, "");
+      const model = process.env.LIARA_TTS_MODEL || process.env.OPENAI_TTS_MODEL || "tts-1";
+      const voice = process.env.LIARA_TTS_VOICE || process.env.OPENAI_TTS_VOICE || "echo";
       if (!key) return { ok: false as const, error: "no_tts_key" };
-      const res = await fetch(`${baseUrl}/audio/speech`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, voice, input: data.text.slice(0, 900) }),
-      });
-      if (!res.ok) return { ok: false as const, error: `tts_${res.status}` };
-      const buf = Buffer.from(await res.arrayBuffer());
-      return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      try {
+        const res = await fetch(`${baseUrl}/audio/speech`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model, voice, input: data.text.slice(0, 900) }),
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          const body = (await res.text().catch(() => "")).slice(0, 300);
+          logAi("tts http", res.status, baseUrl, model, body);
+          return { ok: false as const, error: `tts_${res.status}` };
+        }
+        const buf = Buffer.from(await res.arrayBuffer());
+        return { ok: true as const, audio: buf.toString("base64"), mime: res.headers.get("content-type") || "audio/mpeg" };
+      } finally {
+        clearTimeout(timeout);
+      }
     } catch {
       return { ok: false as const, error: "tts_fail" };
     }
