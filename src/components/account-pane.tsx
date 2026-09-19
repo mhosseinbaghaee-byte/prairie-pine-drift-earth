@@ -31,9 +31,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-type Section = "profile" | "account" | "roles" | "plans";
-
 const ROLE_KEY = "pouya-role-v1";
+const ROLE_PROFILE_KEY = "pouya-role-profile-v1";
+
+type Section = "personal" | "account" | "class" | "plans";
+
+type RoleProfile = {
+  /** دانش‌آموز */
+  grade: string;
+  school: string;
+  /** مربی */
+  subjects: string;
+  teachGrades: string;
+};
+
+const DEFAULT_ROLE_PROFILE: RoleProfile = {
+  grade: "",
+  school: "",
+  subjects: "",
+  teachGrades: "",
+};
 
 function loadRole(): LocalRole | "" {
   if (typeof window === "undefined") return "";
@@ -55,12 +72,56 @@ function saveRole(role: LocalRole | "") {
   }
 }
 
+function loadRoleProfile(): RoleProfile {
+  if (typeof window === "undefined") return { ...DEFAULT_ROLE_PROFILE };
+  try {
+    const raw = localStorage.getItem(ROLE_PROFILE_KEY);
+    if (!raw) return { ...DEFAULT_ROLE_PROFILE };
+    return { ...DEFAULT_ROLE_PROFILE, ...(JSON.parse(raw) as object) };
+  } catch {
+    return { ...DEFAULT_ROLE_PROFILE };
+  }
+}
+
+function saveRoleProfile(patch: Partial<RoleProfile>): RoleProfile {
+  const next = { ...loadRoleProfile(), ...patch };
+  try {
+    localStorage.setItem(ROLE_PROFILE_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
+const STUDENT_GRADES = [
+  "ابتدایی",
+  "هفتم",
+  "هشتم",
+  "نهم",
+  "دهم",
+  "یازدهم",
+  "دوازدهم",
+  "کنکور",
+] as const;
+
+const TEACHER_SUBJECT_HINTS = [
+  "ریاضی",
+  "فیزیک",
+  "شیمی",
+  "زیست",
+  "زبان",
+  "ادبیات",
+  "عربی",
+  "علوم",
+] as const;
+
 export function AccountPane() {
-  const [section, setSection] = useState<Section>("profile");
+  const [role, setRole] = useState<LocalRole | "">(() => loadRole());
+  const [section, setSection] = useState<Section>("personal");
   const [profile, setProfile] = useState<UserProfile>(() => loadProfile());
+  const [roleProfile, setRoleProfile] = useState<RoleProfile>(() => loadRoleProfile());
   const [account, setAccount] = useState<LocalAccount>(() => loadAccount());
   const [sub, setSub] = useState<SubscriptionState>(() => loadSubscription());
-  const [role, setRole] = useState<LocalRole | "">(() => loadRole());
   const [classes, setClasses] = useState<LocalClassroom[]>(() => listClassrooms());
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -75,15 +136,35 @@ export function AccountPane() {
     setEmail(a.email);
     setPhone(a.phone);
     setProfile(loadProfile());
+    setRoleProfile(loadRoleProfile());
     setSub(loadSubscription());
     setRole(loadRole());
     setClasses(listClassrooms());
   }, []);
 
+  function pickRole(r: LocalRole) {
+    setRole(r);
+    saveRole(r);
+    setSection("personal");
+    toast.success(r === "teacher" ? "وارد فضای مربی شدی." : "وارد فضای دانش‌آموز شدی.");
+  }
+
+  function changeRole() {
+    setRole("");
+    saveRole("");
+    setSection("personal");
+  }
+
   function persistProfile(patch: Partial<UserProfile>) {
     const next = saveProfile(patch);
     setProfile(next);
-    toast.success("تنظیمات شخصی ذخیره شد.");
+    toast.success("ذخیره شد.");
+  }
+
+  function persistRoleProfile(patch: Partial<RoleProfile>) {
+    const next = saveRoleProfile(patch);
+    setRoleProfile(next);
+    toast.success("ذخیره شد.");
   }
 
   function toggleGoal(goal: string) {
@@ -94,6 +175,10 @@ export function AccountPane() {
 
   function submitAccount(e: React.FormEvent) {
     e.preventDefault();
+    if (!role) {
+      toast.error("اول نوع کاربری را انتخاب کن.");
+      return;
+    }
     if (!name.trim() || !email.trim() || !email.includes("@")) {
       toast.error("نام و ایمیل معتبر لازم است.");
       return;
@@ -101,7 +186,9 @@ export function AccountPane() {
     const next = openAccount({ name, email, phone });
     setAccount(next);
     setProfile(loadProfile());
-    toast.success("حساب محلی باز شد.");
+    toast.success(
+      role === "teacher" ? "حساب مربی باز شد (محلی)." : "حساب دانش‌آموز باز شد (محلی).",
+    );
   }
 
   function buy(planId: PlanId) {
@@ -111,22 +198,14 @@ export function AccountPane() {
       return;
     }
     setSub(activatePlan(planId));
-    toast.success(`بسته «${planById(planId).name}» فعال شد (آزمایشی تا اتصال درگاه).`);
-  }
-
-  function pickRole(r: LocalRole) {
-    setRole(r);
-    saveRole(r);
-    toast.success(r === "teacher" ? "نقش مربی ذخیره شد." : "نقش دانش‌آموز ذخیره شد.");
+    toast.success(`بسته «${planById(planId).name}» فعال شد (آزمایشی).`);
   }
 
   function onCreateClass() {
-    if (role !== "teacher") {
-      toast.error("اول نقش مربی را انتخاب کن.");
-      return;
-    }
+    if (role !== "teacher") return;
     const c = createClassroom({
       title: classTitle || "کلاس پویا",
+      grade: roleProfile.teachGrades,
       ownerName: account.name || profile.displayName || "مربی",
     });
     setClasses(listClassrooms());
@@ -135,10 +214,7 @@ export function AccountPane() {
   }
 
   function onJoinClass() {
-    if (role !== "student") {
-      toast.error("اول نقش دانش‌آموز را انتخاب کن.");
-      return;
-    }
+    if (role !== "student") return;
     const c = joinClassroom({ code: joinCode });
     if (!c) {
       toast.error("کد کلاس معتبر نیست.");
@@ -151,28 +227,94 @@ export function AccountPane() {
 
   const currentPlan = planById(sub.planId);
 
+  /* ——— انتخاب نقش (قبل از هر چیز) ——— */
+  if (!role) {
+    return (
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-5 overflow-y-auto px-4 py-6 sm:px-5">
+        <div>
+          <h2 className="font-display text-2xl font-medium tracking-tight">افتتاح حساب</h2>
+          <p className="mt-2 text-sm text-fg-muted text-pretty">
+            اول بگو دانش‌آموزی یا مربی. بعد بخش شخصی مخصوص همان نقش باز می‌شود.
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => pickRole("student")}
+            className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-5 text-right transition hover:border-stage/50 hover:bg-cream/40"
+          >
+            <span className="text-2xl" aria-hidden>
+              🎒
+            </span>
+            <span className="font-display text-lg font-medium">دانش‌آموز</span>
+            <span className="text-sm leading-relaxed text-fg-muted">
+              درس بخوان، به کلاس مدرسه وصل شو، سطح و هدف یادگیری‌ات را تنظیم کن.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => pickRole("teacher")}
+            className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-5 text-right transition hover:border-stage/50 hover:bg-cream/40"
+          >
+            <span className="text-2xl" aria-hidden>
+              🧑‍🏫
+            </span>
+            <span className="font-display text-lg font-medium">مربی / معلم</span>
+            <span className="text-sm leading-relaxed text-fg-muted">
+              کلاس بساز، کد بده، تخصص و مقطع تدریس را مشخص کن.
+            </span>
+          </button>
+        </div>
+        <p className="text-xs text-fg-subtle">فعلاً داده روی همین دستگاه است؛ ورود ابری بعداً.</p>
+      </div>
+    );
+  }
+
+  const tabs =
+    role === "teacher"
+      ? ([
+          ["personal", "شخصی مربی"],
+          ["account", "حساب"],
+          ["class", "کلاس‌ها"],
+          ["plans", "اشتراک"],
+        ] as const)
+      : ([
+          ["personal", "شخصی دانش‌آموز"],
+          ["account", "حساب"],
+          ["class", "کلاس من"],
+          ["plans", "اشتراک"],
+        ] as const);
+
   return (
     <div className="mx-auto flex w-full max-w-xl flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-5">
-      <div className="mb-4">
-        <h2 className="font-display text-2xl font-medium tracking-tight">حساب و شخصی‌سازی</h2>
-        <p className="mt-1.5 text-sm text-fg-muted">سطح، نقش، کلاس و اشتراک را اینجا تنظیم کن.</p>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-2xl font-medium tracking-tight">
+            {role === "teacher" ? "فضای مربی" : "فضای دانش‌آموز"}
+          </h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            {role === "teacher"
+              ? "پروفایل تدریس، حساب و کلاس‌هایت."
+              : "پروفایل یادگیری، حساب و کلاس مدرسه."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={changeRole}
+          className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs text-fg-muted hover:border-stage/40"
+        >
+          تغییر نقش
+        </button>
       </div>
 
       <div className="mb-5 flex flex-wrap rounded-lg bg-surface p-1">
-        {(
-          [
-            ["profile", "شخصی"],
-            ["account", "حساب"],
-            ["roles", "نقش/کلاس"],
-            ["plans", "اشتراک"],
-          ] as const
-        ).map(([id, label]) => (
+        {tabs.map(([id, label]) => (
           <button
             key={id}
             type="button"
             onClick={() => setSection(id)}
             className={cn(
-              "h-9 min-w-[4.5rem] flex-1 rounded-md text-sm transition-colors",
+              "h-9 min-w-[4.2rem] flex-1 rounded-md px-1 text-xs transition-colors sm:text-sm",
               section === id ? "bg-cream text-ink" : "text-fg-muted hover:text-fg",
             )}
           >
@@ -181,7 +323,8 @@ export function AccountPane() {
         ))}
       </div>
 
-      {section === "profile" ? (
+      {/* ——— شخصی دانش‌آموز ——— */}
+      {section === "personal" && role === "student" ? (
         <div className="flex flex-col gap-5">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="text-fg-muted">نام نمایشی</span>
@@ -189,11 +332,43 @@ export function AccountPane() {
               value={profile.displayName}
               onChange={(e) => setProfile((p) => ({ ...p, displayName: e.target.value }))}
               onBlur={() => persistProfile({ displayName: profile.displayName })}
-              placeholder="مثلاً آرمین"
+              placeholder="مثلاً سارا"
             />
           </label>
+
           <div>
-            <p className="mb-2 text-sm text-fg-muted">سطح پیش‌فرض</p>
+            <p className="mb-2 text-sm text-fg-muted">پایه / مقطع</p>
+            <div className="flex flex-wrap gap-2">
+              {STUDENT_GRADES.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => persistRoleProfile({ grade: g })}
+                  className={cn(
+                    "h-9 rounded-full border px-3 text-sm",
+                    roleProfile.grade === g
+                      ? "border-stage bg-cream text-ink"
+                      : "border-border bg-card hover:border-stage/40",
+                  )}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="text-fg-muted">مدرسه (اختیاری)</span>
+            <Input
+              value={roleProfile.school}
+              onChange={(e) => setRoleProfile((p) => ({ ...p, school: e.target.value }))}
+              onBlur={() => persistRoleProfile({ school: roleProfile.school })}
+              placeholder="نام مدرسه"
+            />
+          </label>
+
+          <div>
+            <p className="mb-2 text-sm text-fg-muted">سطح پاسخ پویا</p>
             <div className="flex flex-wrap gap-2">
               {LEVELS.map((l) => (
                 <button
@@ -203,7 +378,9 @@ export function AccountPane() {
                   onClick={() => persistProfile({ level: l.id as Level })}
                   className={cn(
                     "h-9 rounded-full border px-3 text-sm",
-                    profile.level === l.id ? "border-stage bg-cream text-ink" : "border-border bg-card hover:border-stage/40",
+                    profile.level === l.id
+                      ? "border-stage bg-cream text-ink"
+                      : "border-border bg-card hover:border-stage/40",
                   )}
                 >
                   {l.label}
@@ -211,6 +388,7 @@ export function AccountPane() {
               ))}
             </div>
           </div>
+
           <div>
             <p className="mb-2 text-sm text-fg-muted">هدف‌های یادگیری (تا ۴)</p>
             <div className="flex flex-wrap gap-2">
@@ -232,8 +410,9 @@ export function AccountPane() {
               })}
             </div>
           </div>
+
           <div>
-            <p className="mb-2 text-sm text-fg-muted">مربی محبوب</p>
+            <p className="mb-2 text-sm text-fg-muted">مربی محبوب داخل اپ</p>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -265,89 +444,175 @@ export function AccountPane() {
         </div>
       ) : null}
 
+      {/* ——— شخصی مربی ——— */}
+      {section === "personal" && role === "teacher" ? (
+        <div className="flex flex-col gap-5">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="text-fg-muted">نام نمایشی مربی</span>
+            <Input
+              value={profile.displayName}
+              onChange={(e) => setProfile((p) => ({ ...p, displayName: e.target.value }))}
+              onBlur={() => persistProfile({ displayName: profile.displayName })}
+              placeholder="مثلاً استاد رضایی"
+            />
+          </label>
+
+          <div>
+            <p className="mb-2 text-sm text-fg-muted">درس‌های تخصص (چندتایی)</p>
+            <div className="mb-2 flex flex-wrap gap-2">
+              {TEACHER_SUBJECT_HINTS.map((s) => {
+                const list = roleProfile.subjects
+                  .split(/[،,]/)
+                  .map((x) => x.trim())
+                  .filter(Boolean);
+                const on = list.includes(s);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      const next = on ? list.filter((x) => x !== s) : [...list, s];
+                      persistRoleProfile({ subjects: next.join("، ") });
+                    }}
+                    className={cn(
+                      "h-9 rounded-full border px-3 text-sm",
+                      on ? "border-stage bg-cream text-ink" : "border-border bg-card hover:border-stage/40",
+                    )}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+            <Input
+              value={roleProfile.subjects}
+              onChange={(e) => setRoleProfile((p) => ({ ...p, subjects: e.target.value }))}
+              onBlur={() => persistRoleProfile({ subjects: roleProfile.subjects })}
+              placeholder="یا خودت بنویس: ریاضی، فیزیک…"
+            />
+          </div>
+
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="text-fg-muted">مقطع تدریس</span>
+            <Input
+              value={roleProfile.teachGrades}
+              onChange={(e) => setRoleProfile((p) => ({ ...p, teachGrades: e.target.value }))}
+              onBlur={() => persistRoleProfile({ teachGrades: roleProfile.teachGrades })}
+              placeholder="مثلاً دهم تا دوازدهم / کنکور"
+            />
+          </label>
+
+          <div>
+            <p className="mb-2 text-sm text-fg-muted">سطح پیش‌فرض توضیح برای دانش‌آموزان</p>
+            <div className="flex flex-wrap gap-2">
+              {LEVELS.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  title={l.hint}
+                  onClick={() => persistProfile({ level: l.id as Level })}
+                  className={cn(
+                    "h-9 rounded-full border px-3 text-sm",
+                    profile.level === l.id
+                      ? "border-stage bg-cream text-ink"
+                      : "border-border bg-card hover:border-stage/40",
+                  )}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-xs text-fg-subtle text-pretty">
+            ساخت کلاس و صدور کد در زبانه «کلاس‌ها» است. جزوه و آزمون اختصاصی کلاس در فاز بعد وصل می‌شود.
+          </p>
+        </div>
+      ) : null}
+
+      {/* ——— حساب ——— */}
       {section === "account" ? (
         <div className="flex flex-col gap-4">
+          <p className="text-sm text-fg-muted">
+            نقش فعلی: <strong>{role === "teacher" ? "مربی" : "دانش‌آموز"}</strong>
+          </p>
           {account.opened ? (
             <div className="rounded-xl border border-border bg-card p-4 text-sm">
               <p className="font-medium">حساب فعال (محلی)</p>
               <p className="mt-2 text-fg-muted">نام: {account.name}</p>
               <p className="text-fg-muted">ایمیل: {account.email}</p>
               {account.phone ? <p className="text-fg-muted">موبایل: {account.phone}</p> : null}
-              <p className="mt-2 text-xs text-fg-subtle">داده روی این دستگاه است؛ ورود ابری در نسخه بعد.</p>
+              <p className="mt-2 text-xs text-fg-subtle">داده روی این دستگاه است.</p>
             </div>
           ) : (
             <form className="flex flex-col gap-3" onSubmit={submitAccount}>
-              <p className="text-sm text-fg-muted">برای خرید اشتراک، حساب ساده باز کن.</p>
+              <p className="text-sm text-fg-muted">
+                {role === "teacher"
+                  ? "برای مدیریت کلاس و اشتراک، حساب مربی باز کن."
+                  : "برای عضویت در کلاس و اشتراک، حساب دانش‌آموز باز کن."}
+              </p>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="نام" required />
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ایمیل" required />
+              <Input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ایمیل"
+                required
+              />
               <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="موبایل (اختیاری)" />
-              <Button type="submit">افتتاح حساب</Button>
+              <Button type="submit">
+                {role === "teacher" ? "افتتاح حساب مربی" : "افتتاح حساب دانش‌آموز"}
+              </Button>
             </form>
           )}
         </div>
       ) : null}
 
-      {section === "roles" ? (
+      {/* ——— کلاس ——— */}
+      {section === "class" ? (
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-fg-muted text-pretty">
-            فاز A1 محلی: نقش و کد کلاس روی همین دستگاه ذخیره می‌شود (هنوز سرور مشترک نیست).
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => pickRole("student")}
-              className={cn(
-                "h-10 flex-1 rounded-full border text-sm",
-                role === "student" ? "border-stage bg-cream text-ink" : "border-border bg-card",
-              )}
-            >
-              دانش‌آموز
-            </button>
-            <button
-              type="button"
-              onClick={() => pickRole("teacher")}
-              className={cn(
-                "h-10 flex-1 rounded-full border text-sm",
-                role === "teacher" ? "border-stage bg-cream text-ink" : "border-border bg-card",
-              )}
-            >
-              مربی
-            </button>
-          </div>
-
           {role === "teacher" ? (
             <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
-              <p className="text-sm font-medium">ساخت کلاس</p>
-              <Input value={classTitle} onChange={(e) => setClassTitle(e.target.value)} placeholder="عنوان کلاس" />
+              <p className="text-sm font-medium">ساخت کلاس جدید</p>
+              <Input
+                value={classTitle}
+                onChange={(e) => setClassTitle(e.target.value)}
+                placeholder="عنوان کلاس — مثلاً زیست یازدهم"
+              />
               <Button type="button" onClick={onCreateClass}>
                 صدور کد کلاس
               </Button>
             </div>
-          ) : null}
-
-          {role === "student" ? (
+          ) : (
             <div className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3">
-              <p className="text-sm font-medium">پیوستن با کد</p>
-              <Input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="مثلاً POUYA-7K3M" />
+              <p className="text-sm font-medium">پیوستن با کد مربی</p>
+              <Input
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="مثلاً POUYA-7K3M"
+              />
               <Button type="button" onClick={onJoinClass}>
                 عضویت در کلاس
               </Button>
             </div>
-          ) : null}
+          )}
 
           <div>
-            <p className="mb-2 text-sm text-fg-muted">کلاس‌های این دستگاه</p>
+            <p className="mb-2 text-sm text-fg-muted">
+              {role === "teacher" ? "کلاس‌های ساخته‌شده" : "کلاس‌های عضو"}
+            </p>
             {classes.length === 0 ? (
               <p className="text-sm text-fg-subtle">هنوز کلاسی نیست.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {classes.map((c) => (
-                  <li key={c.code} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+                  <li
+                    key={c.code}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm"
+                  >
                     <div>
                       <p className="font-medium">{c.title}</p>
-                      <p className="text-xs text-fg-muted">
-                        {c.code} · {c.role === "teacher" ? "مربی" : "دانش‌آموز"}
-                      </p>
+                      <p className="text-xs text-fg-muted">{c.code}</p>
                     </div>
                     <Button
                       size="sm"
@@ -367,6 +632,7 @@ export function AccountPane() {
         </div>
       ) : null}
 
+      {/* ——— اشتراک ——— */}
       {section === "plans" ? (
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-stage/30 bg-cream/40 px-4 py-3 text-sm text-ink">
@@ -409,9 +675,7 @@ export function AccountPane() {
               </Button>
             </article>
           ))}
-          <p className="text-pretty text-xs text-fg-subtle">
-            پرداخت واقعی بعداً؛ الان فعال‌سازی آزمایشی است.
-          </p>
+          <p className="text-pretty text-xs text-fg-subtle">پرداخت واقعی بعداً؛ الان آزمایشی است.</p>
         </div>
       ) : null}
     </div>
