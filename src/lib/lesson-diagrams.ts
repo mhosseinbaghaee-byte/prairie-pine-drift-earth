@@ -131,10 +131,13 @@ export const LESSON_DIAGRAMS: LessonDiagram[] = [
   },
   {
     id: "earth_map",
-    title: "نقشه ساده زمین",
+    title: "نقشه کره زمین",
     subject: "جغرافیا",
     grades: "چهارم تا نهم",
-    keywords: ["نقشه جهان", "نقشه زمین", "قاره", "اقیانوس", "جغرافیا نقشه", "world map"],
+    keywords: [
+      "نقشه جهان", "نقشه زمین", "نقشه کره", "نقشه کره زمین", "کره زمین",
+      "قاره", "اقیانوس", "جغرافیا نقشه", "world map", "شکل نقشه",
+    ],
     caption: "نقشه جهان برای شناخت قاره‌ها و اقیانوس‌ها.",
     imageUrl: WM("World_map_blank_without_borders.svg", 900),
     attribution: "ویکی‌مدیا کامنز — نقشه جهان",
@@ -253,17 +256,28 @@ export function diagramById(id: string): LessonDiagram | undefined {
   return LESSON_DIAGRAMS.find((d) => d.id === id);
 }
 
+function norm(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/\u200c/g, "")
+    .replace(/[ي]/g, "ی")
+    .replace(/[ك]/g, "ک")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function matchDiagram(text: string): LessonDiagram | null {
-  const t = text.toLowerCase().trim();
+  const t = norm(text);
   if (t.length < 2) return null;
   let best: LessonDiagram | null = null;
   let score = 0;
   for (const d of LESSON_DIAGRAMS) {
     let hits = 0;
     for (const k of d.keywords) {
-      const key = k.toLowerCase();
+      const key = norm(k);
+      if (!key) continue;
       if (t.includes(key)) {
-        hits += Math.max(1, Math.min(6, Math.floor(key.length / 2)));
+        hits += Math.max(2, Math.min(8, Math.floor(key.length / 2)));
       }
     }
     if (hits > score) {
