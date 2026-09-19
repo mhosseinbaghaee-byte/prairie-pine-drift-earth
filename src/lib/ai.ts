@@ -53,7 +53,9 @@ function levelLine(level: Level) {
 function textbookStyleRules(level: Level) {
   return (
     `سبک کتاب درسی فارسی:\n` +
-    `- بدون LaTeX خام. sin/cos/tan/cot مجاز. کسر را ساده بنویس.\n` +
+    `- بدون LaTeX و بدون علامت دلار ($). هرگز $ یا $$ نگذار.\n` +
+    `- sin/cos/tan/cot و π مجاز. کسر را ساده بنویس مثل (۱) ÷ (۲).\n` +
+    `- به جای $2\\pi$ بنویس ۲π. به جای $x = \\pi/2$ بنویس x = π/2.\n` +
     (level === "kid" ? `- خیلی ساده و خودمانی.\n` : `- واضح و مرحله‌ای.\n`)
   );
 }
@@ -61,10 +63,24 @@ function textbookStyleRules(level: Level) {
 function sanitizeStudentMath(text: string, level: Level): string {
   let t = text;
   t = t.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/gi, "($1) ÷ ($2)");
+  t = t.replace(/\\pi\b/gi, "π");
+  t = t.replace(/\\times\b/gi, "×");
+  t = t.replace(/\\cdot\b/gi, "·");
+  t = t.replace(/\\leq\b/gi, "≤");
+  t = t.replace(/\\geq\b/gi, "≥");
+  t = t.replace(/\\neq\b/gi, "≠");
+  t = t.replace(/\\infty\b/gi, "∞");
+  t = t.replace(/\$\$([\s\S]*?)\$\$/g, "$1");
+  t = t.replace(/\$([^$]+)\$/g, "$1");
+  t = t.replace(/\$/g, "");
   t = t.replace(/\\[a-zA-Z]+/g, "");
   t = t.replace(/\\\[|\\\]/g, "");
-  t = t.replace(/\s+/g, " ").trim();
-  return t;
+  t = t.replace(/\\\(|\\\)/g, "");
+  t = t.replace(/\{([^{}]*)\}/g, "$1");
+  t = t.replace(/[ \t]+\n/g, "\n");
+  t = t.replace(/\n{3,}/g, "\n\n");
+  t = t.replace(/[ \t]{2,}/g, " ");
+  return t.trim();
 }
 
 function parseDataUrl(dataUrl: string): { mime: string; b64: string } | null {
@@ -87,23 +103,21 @@ function systemPrompt(
   const coach = assistantSystemExtra(assistantId);
   const vision = hasImage
     ? `\n- کاربر تصویر/جزوه/برگه فرستاده. تصویر را دقیق ببین و تحلیل کن.\n` +
-      `- برگه امتحان یا تست: سؤال‌ها را بخوان، مرحله‌به‌مرحله حل کن، جواب نهایی را مشخص کن.\n` +
+      `- برگه امتحان یا تست: سؤال‌ها را بخوان، مرحله‌به‌مرحله حل کن.\n` +
       `- تمرین دست‌نویس: خطا را پیدا کن و راه درست را ساده بگو.\n` +
-      `- نمودار ریاضی/فیزیک: محورها، روند، نقاط مهم؛ در صورت نیاز تگ [graph:عبارت] بگذار.\n` +
-      `- شکل زیست/شیمی یا عکس کتاب: نام اجزا و توضیح کتاب‌درسی.\n` +
+      `- نمودار: محورها و نقاط مهم؛ در صورت نیاز [graph:عبارت].\n` +
       `- نگو «فقط شکل هندسی می‌فهمم».`
     : "";
   const memory =
     learningBrief && learningBrief.trim()
-      ? `\nحافظه یادگیری این دانش‌آموز (برای شخصی‌سازی؛ موضوع سؤال فعلی را عوض نکن):\n${learningBrief.trim()}\n`
+      ? `\nحافظه یادگیری این دانش‌آموز (موضوع سؤال فعلی را عوض نکن):\n${learningBrief.trim()}\n`
       : "";
   const base =
     `تو «پویا» هستی: مربی زنده آموزش برای دانش‌آموزان ایران.\n` +
     `قوانین سخت:\n` +
     `- ${levelLine(level)}\n` +
     `- همیشه مستقیماً به همان سؤال کاربر جواب بده. موضوع را عوض نکن.\n` +
-    `- برای توضیح تابع ریاضی ساده، در صورت مفید بودن یک تگ [graph:عبارت] بگذار (مثل [graph:sin(x)] یا [graph:x^2]).\n` +
-    `- اگر پرسید «چرخ چیست» درباره چرخ بگو؛ نرو سراغ درس تصادفی.\n` +
+    `- برای توضیح تابع ریاضی ساده، در صورت مفید بودن [graph:عبارت] بگذار (مثل [graph:sin(x)]).\n` +
     `- زبان پاسخ = زبان پیام کاربر.\n` +
     `- ${textbookStyleRules(level)}` +
     vision +
@@ -180,9 +194,7 @@ async function callGemini(
   const parsed = imageDataUrl ? parseDataUrl(imageDataUrl) : null;
   const contents = history.map((m, i) => {
     const role = m.role === "assistant" ? "model" : "user";
-    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
-      { text: m.content },
-    ];
+    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [{ text: m.content }];
     if (parsed && m.role === "user" && i === history.length - 1) {
       parts.push({ inlineData: { mimeType: parsed.mime, data: parsed.b64 } });
     }
