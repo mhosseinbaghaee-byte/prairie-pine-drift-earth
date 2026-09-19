@@ -216,7 +216,7 @@ async function callGemini(
       });
       if (!res.ok) continue;
       const json = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
+        candidates?: { content?: { parts?: { text?: string } }[] }[];
       };
       const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim();
       if (text) return { ok: true, text, provider: `gemini:${model}` };
@@ -253,9 +253,9 @@ async function chatComplete(
 
 function attachDiagramIfUseful(userText: string, reply: string): string {
   if (/\[diagram:/i.test(reply)) return reply;
-  const d = matchDiagram(userText);
+  const d = matchDiagram(userText) || matchDiagram(reply.slice(0, 280));
   if (!d) return reply;
-  return `${reply}\n\n${diagramTag(d.id)}`;
+  return `${diagramTag(d.id)}\n\n${reply}`;
 }
 
 export const askPouya = createServerFn({ method: "POST" })
@@ -281,7 +281,8 @@ export const askPouya = createServerFn({ method: "POST" })
         mode: data.mode === "language" ? "live" : data.mode,
         lang: data.lang,
       });
-      return { ok: true as const, text: fallback, provider: "local" };
+      const lastUser = [...data.messages].reverse().find((m) => m.role === "user")?.content || "";
+      return { ok: true as const, text: attachDiagramIfUseful(lastUser, fallback), provider: "local" };
     } catch {
       return { ok: false as const, error: "handler_error" };
     }
