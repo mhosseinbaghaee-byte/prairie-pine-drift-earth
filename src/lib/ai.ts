@@ -4,6 +4,7 @@ import { localQuiz, localTutorReply, todayFact, type QuizPayload, type QuizQuest
 import { langById, type Level } from "./topics";
 import { assistantSystemExtra } from "./assistants";
 import { LESSON_DIAGRAMS, diagramTag, matchDiagram } from "./lesson-diagrams";
+import { bankReply } from "./bank-first";
 import {
   findWikiImage,
   looksVisual,
@@ -47,7 +48,7 @@ export type { QuizQuestion, QuizPayload };
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
-type ProviderId = "openai" | "gemini";
+type ProviderId = "bank" | "openai" | "gemini";
 
 // مدل‌های Gemini از env (GEMINI_MODELS، جداشده با کاما) خوانده می‌شود؛ مدل‌های ۲.۰ و ۱.۵ خاموش شده‌اند.
 const DEFAULT_GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3-flash-preview", "gemini-2.5-flash"];
@@ -59,8 +60,8 @@ function geminiModels(): string[] {
 function logAi(...args: unknown[]) {
   console.error("[pouya-ai]", ...args);
 }
-/** ترتیب: Gemini (سریع fail) → لیارا/OpenAI → محلی */
-const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai"];
+/** ترتیب اقتصادی: بانک محلی (رایگان) → Gemini رایگان → لیارا/OpenAI → پاسخ محلی عمومی */
+const DEFAULT_ORDER: ProviderId[] = ["bank", "gemini", "openai"];
 
 const DIAGRAM_IDS = LESSON_DIAGRAMS.map((d) => d.id).join(", ");
 
@@ -292,7 +293,7 @@ function providerOrder(): ProviderId[] {
   const raw = process.env.AI_PROVIDER_ORDER;
   if (!raw) return DEFAULT_ORDER;
   const parts = raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) as ProviderId[];
-  const valid = parts.filter((p) => p === "openai" || p === "gemini");
+  const valid = parts.filter((p) => p === "bank" || p === "openai" || p === "gemini");
   return valid.length ? valid : DEFAULT_ORDER;
 }
 
@@ -303,6 +304,7 @@ async function chatComplete(
   imageDataUrl?: string,
 ): Promise<ChatResult> {
   for (const p of providerOrder()) {
+    if (p === "bank") continue; // بانک قبل از فراخوانی مدل در askPouya بررسی می‌شود
     const r =
       p === "openai"
         ? await callOpenAI(system, history, maxTokens, imageDataUrl)
@@ -322,6 +324,12 @@ function attachDiagramIfUseful(userText: string, reply: string): string {
   return `${reply}\n\n${diagramTag(d.id)}`;
 }
 
+async function withLocalVisual(lastUser: string, text: string): Promise<string> {
+  const fq = queryFromPersian(lastUser);
+  const fimg = fq ? await findWikiImage(fq) : null;
+  return fimg ? `${text}\n\n${wikiMarkdown(fimg)}` : attachDiagramIfUseful(lastUser, text);
+}
+
 export const askPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => ChatInput.parse(input))
   .handler(async ({ data }) => {
@@ -332,6 +340,14 @@ export const askPouya = createServerFn({ method: "POST" })
       const history = data.messages.map((m) =>
         m.role === "assistant" ? { ...m, content: m.content.replace(/!\[[^\]]*\]\([^)]*\)/g, "[تصویر]") } : m,
       );
+      // اولویت اقتصادی: اگر بانک محلی جواب مطمئن دارد، اصلاً مدل صدا زده نمی‌شود
+      if (!hasImage && providerOrder()[0] === "bank") {
+        const b = bankReply({ messages: data.messages, mode: data.mode, lang: data.lang });
+        if (b) {
+          const lu = [...data.messages].reverse().find((m) => m.role === "user")?.content || "";
+          return { ok: true as const, text: await withLocalVisual(lu, b), provider: "bank" };
+        }
+      }
       const result = await chatComplete(
         systemPrompt(data.level, data.mode, data.lang, data.assistantId, hasImage, data.learningBrief),
         history,
@@ -358,13 +374,7 @@ export const askPouya = createServerFn({ method: "POST" })
       });
       const lastUser = [...data.messages].reverse().find((m) => m.role === "user")?.content || "";
       // بدون مدل: تصویر را خودمان از ویکی‌مدیا پیدا می‌کنیم؛ اگر نشد، بانک شکل محلی
-      const fq = queryFromPersian(lastUser);
-      const fimg = fq ? await findWikiImage(fq) : null;
-      return {
-        ok: true as const,
-        text: fimg ? `${fallback}\n\n${wikiMarkdown(fimg)}` : attachDiagramIfUseful(lastUser, fallback),
-        provider: "local",
-      };
+      return { ok: true as const, text: await withLocalVisual(lastUser, fallback), provider: "local" };
     } catch {
       return { ok: false as const, error: "handler_error" };
     }
@@ -380,6 +390,9 @@ export const makeQuiz = createServerFn({ method: "POST" })
       return { ok: false as const, error: "quiz_fail" };
     }
   });
+
+// آخرین ترکیب مدل/صدای موفق را نگه می‌داریم تا درخواست‌های بعدی فقط یک بار به سرویس بروند
+let ttsGood: { model: string; voice: string } | null = null;
 
 export const speakPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => SpeakInput.parse(input))
@@ -415,8 +428,13 @@ export const speakPouya = createServerFn({ method: "POST" })
         (v, idx, arr) => arr.indexOf(v) === idx,
       );
       const deadline = Date.now() + 18000;
+      const combos: { model: string; voice: string }[] = ttsGood ? [ttsGood] : [];
       for (const voice of voices) {
         for (const model of models) {
+          if (!combos.some((c) => c.model === model && c.voice === voice)) combos.push({ model, voice });
+        }
+      }
+      for (const { model, voice } of combos) {
           if (Date.now() > deadline) {
             logAi("tts: deadline reached");
             return { ok: false as const, error: "tts_timeout" };
@@ -442,7 +460,10 @@ export const speakPouya = createServerFn({ method: "POST" })
             if (ctype.includes("application/json")) {
               const body = (await res.json()) as { audio?: string; data?: string };
               const b64 = body.audio || body.data;
-              if (b64) return { ok: true as const, audio: b64, mime: "audio/mpeg" };
+              if (b64) {
+                ttsGood = { model, voice };
+                return { ok: true as const, audio: b64, mime: "audio/mpeg" };
+              }
               logAi("tts json without audio", model, voice);
               continue;
             }
@@ -451,13 +472,13 @@ export const speakPouya = createServerFn({ method: "POST" })
               logAi("tts tiny response", buf.length, model, voice);
               continue;
             }
+            ttsGood = { model, voice };
             return { ok: true as const, audio: buf.toString("base64"), mime: ctype.startsWith("audio/") ? ctype : "audio/mpeg" };
           } catch (err) {
             logAi("tts exception", model, voice, err instanceof Error ? err.message : String(err));
           } finally {
             clearTimeout(timeout);
           }
-        }
       }
       return { ok: false as const, error: "tts_unavailable" };
     } catch (err) {
