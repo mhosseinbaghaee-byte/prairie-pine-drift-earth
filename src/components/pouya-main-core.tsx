@@ -149,6 +149,8 @@ export function PouyaMainApp() {
     };
     const hasFa = /[\u0600-\u06FF]/.test(spoken);
     const speakLang = hasFa ? "fa-IR" : langById(lang).locale;
+    // TTS پولی فقط داخل باکس مکالمه صوتی (کله‌ی پویا)؛ بیرون از آن فقط صدای رایگان مرورگر (اگر بلندگو روشن باشد)
+    if (inVoiceCall) {
     try {
       const res = await speakPouya({ data: { text: spoken, lang: speakLang } });
       if (res && typeof res === "object" && "ok" in res && res.ok && "audio" in res && res.audio) {
@@ -169,6 +171,7 @@ export function PouyaMainApp() {
       }
     } catch {
       voiceActiveRef.current = false;
+    }
     }
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
@@ -411,7 +414,6 @@ export function PouyaMainApp() {
 
   async function openVoiceCall() {
     stopMic();
-    setVoiceOn(true);
     voiceCallRef.current = true;
     callMutedRef.current = false;
     setCallMuted(false);
