@@ -3,7 +3,15 @@ import { z } from "zod";
 import { localQuiz, localTutorReply, todayFact, type QuizPayload, type QuizQuestion } from "./library";
 import { langById, type Level } from "./topics";
 import { assistantSystemExtra } from "./assistants";
-import { diagramTag, matchDiagram } from "./lesson-diagrams";
+import { LESSON_DIAGRAMS, diagramTag, matchDiagram } from "./lesson-diagrams";
+import {
+  findWikiImage,
+  looksVisual,
+  queryFromPersian,
+  resolveWikiTags,
+  stripForeignImages,
+  wikiMarkdown,
+} from "./wiki-image";
 
 const MessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -53,6 +61,8 @@ function logAi(...args: unknown[]) {
 }
 /** ترتیب: Gemini (سریع fail) → لیارا/OpenAI → محلی */
 const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai"];
+
+const DIAGRAM_IDS = LESSON_DIAGRAMS.map((d) => d.id).join(", ");
 
 function levelLine(level: Level) {
   if (level === "kid") return "سطح: خیلی ساده، جمله‌های کوتاه، مثل کتاب ابتدایی/متوسطه اول.";
@@ -129,7 +139,8 @@ function systemPrompt(
     `- همیشه مستقیماً به همان سؤال کاربر جواب بده. موضوع را عوض نکن.\n` +
     `- مثل ربات کلمات کلیدی نباش؛ سؤال بچه را بفهم و کامل و مهربان جواب بده، حتی اگر موضوع از قبل پیش‌بینی نشده.\n` +
     `- برای توضیح تابع ریاضی ساده، در صورت مفید بودن [graph:عبارت] بگذار (مثل [graph:sin(x)]).\n` +
-    `- وقتی شکل درسی لازم است فقط تگ [diagram:id] بگذار (مثل [diagram:muscle_types] یا [diagram:neuron]). طرح ASCII و جمله «نمی‌توانم عکس بدهم» ممنوع.\n` +
+    `- برای نمایش تصویر واقعی یا شکل علمی (آناتومی، برش، ساختار، نقشه، اتم، سلول و…) در یک خط جدا و در انتهای پاسخ فقط تگ [wiki:عبارت جستجوی کوتاه انگلیسی] بگذار؛ مثل [wiki:brain axial section] یا [wiki:animal cell diagram]. حداکثر یک تگ، و فقط وقتی تصویر واقعاً کمک می‌کند. سیستم خودش تصویر را از ویکی‌مدیا پیدا و نشان می‌دهد.\n` +
+    `- فقط اگر id دقیقاً یکی از این‌هاست می‌توانی به‌جای آن [diagram:id] بگذاری: ${DIAGRAM_IDS}. طرح ASCII و جمله «نمی‌توانم عکس بدهم» ممنوع.\n` +
     `- شکل اشتباه نگذار: اگر سؤال ماهیچه است [diagram:muscle_types]؛ سلول جانوری عمومی برای ماهیچه ممنوع.\n` +
     `- زبان پاسخ = زبان پیام کاربر.\n` +
     `- ${textbookStyleRules(level)}` +
@@ -317,16 +328,27 @@ export const askPouya = createServerFn({ method: "POST" })
     try {
       const short = data.mode === "live" || data.mode === "language";
       const hasImage = Boolean(data.image && parseDataUrl(data.image));
+      // تصاویر پاسخ‌های قبلی را برای مدل به «[تصویر]» تبدیل می‌کنیم تا توکن هدر نرود
+      const history = data.messages.map((m) =>
+        m.role === "assistant" ? { ...m, content: m.content.replace(/!\[[^\]]*\]\([^)]*\)/g, "[تصویر]") } : m,
+      );
       const result = await chatComplete(
         systemPrompt(data.level, data.mode, data.lang, data.assistantId, hasImage, data.learningBrief),
-        data.messages,
+        history,
         short ? 1024 : 2048,
         hasImage ? data.image : undefined,
       );
       if (result.ok) {
-        let text = sanitizeStudentMath(result.text, data.level);
+        let text = stripForeignImages(sanitizeStudentMath(result.text, data.level));
         const lastUser = [...data.messages].reverse().find((m) => m.role === "user")?.content || "";
-        text = attachDiagramIfUseful(lastUser, text);
+        // ۱) تصویر واقعی از ویکی‌مدیا (تگ مدل)  ۲) اگر مدل تگ نگذاشت ولی کاربر تصویر خواسته  ۳) آخر: بانک شکل محلی
+        const wiki = await resolveWikiTags(text);
+        text = wiki.text;
+        if (!wiki.found && !/\[diagram:/i.test(text)) {
+          const q = looksVisual(lastUser) ? queryFromPersian(lastUser) : null;
+          const img = q ? await findWikiImage(q) : null;
+          text = img ? `${text}\n\n${wikiMarkdown(img)}` : attachDiagramIfUseful(lastUser, text);
+        }
         return { ok: true as const, text, provider: result.provider };
       }
       const fallback = localTutorReply({
@@ -335,7 +357,14 @@ export const askPouya = createServerFn({ method: "POST" })
         lang: data.lang,
       });
       const lastUser = [...data.messages].reverse().find((m) => m.role === "user")?.content || "";
-      return { ok: true as const, text: attachDiagramIfUseful(lastUser, fallback), provider: "local" };
+      // بدون مدل: تصویر را خودمان از ویکی‌مدیا پیدا می‌کنیم؛ اگر نشد، بانک شکل محلی
+      const fq = queryFromPersian(lastUser);
+      const fimg = fq ? await findWikiImage(fq) : null;
+      return {
+        ok: true as const,
+        text: fimg ? `${fallback}\n\n${wikiMarkdown(fimg)}` : attachDiagramIfUseful(lastUser, fallback),
+        provider: "local",
+      };
     } catch {
       return { ok: false as const, error: "handler_error" };
     }
@@ -356,37 +385,83 @@ export const speakPouya = createServerFn({ method: "POST" })
   .validator((input: unknown) => SpeakInput.parse(input))
   .handler(async ({ data }) => {
     try {
-      const key = process.env.LIARA_TTS_API_KEY || process.env.LIARA_API_KEY || process.env.OPENAI_TTS_KEY || process.env.OPENAI_API_KEY;
+      const text = data.text.replace(/[*_`#>-]/g, " ").replace(/\s+/g, " ").trim().slice(0, 900);
+      if (!text) return { ok: false as const, error: "empty" };
+      // کلید/آدرس TTS جدا از چت است (کلید چت روی TTS لیارا ۴۰۱ می‌دهد)؛ پس اولویت با متغیرهای TTS
+      const key =
+        process.env.LIARA_TTS_API_KEY ||
+        process.env.OPENAI_TTS_KEY ||
+        process.env.LIARA_API_KEY ||
+        process.env.OPENAI_API_KEY;
       const baseUrl = (
         process.env.LIARA_TTS_BASE_URL ||
-        process.env.LIARA_BASE_URL ||
         process.env.OPENAI_TTS_BASE_URL ||
+        process.env.LIARA_BASE_URL ||
         process.env.OPENAI_BASE_URL ||
         "https://api.openai.com/v1"
-      ).replace(/\/$/, "");
-      const model = process.env.LIARA_TTS_MODEL || process.env.OPENAI_TTS_MODEL || "tts-1";
-      const voice = process.env.LIARA_TTS_VOICE || process.env.OPENAI_TTS_VOICE || "echo";
-      if (!key) return { ok: false as const, error: "no_tts_key" };
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-      try {
-        const res = await fetch(`${baseUrl}/audio/speech`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model, voice, input: data.text.slice(0, 900) }),
-          signal: controller.signal,
-        });
-        if (!res.ok) {
-          const body = (await res.text().catch(() => "")).slice(0, 300);
-          logAi("tts http", res.status, baseUrl, model, body);
-          return { ok: false as const, error: `tts_${res.status}` };
-        }
-        const buf = Buffer.from(await res.arrayBuffer());
-        return { ok: true as const, audio: buf.toString("base64"), mime: res.headers.get("content-type") || "audio/mpeg" };
-      } finally {
-        clearTimeout(timeout);
+      )
+        .trim()
+        .replace(/\/+$/, "")
+        .replace(/\/audio\/speech$/, "");
+      if (!key) {
+        logAi("tts: no TTS/OpenAI key configured");
+        return { ok: false as const, error: "no_tts_key" };
       }
-    } catch {
+      // لیارا مدل را با پیشوند provider می‌خواهد (openai/tts-1)؛ OpenAI اصلی بدون پیشوند
+      const models = [process.env.LIARA_TTS_MODEL, process.env.OPENAI_TTS_MODEL, "openai/tts-1", "tts-1"].filter(
+        (m, idx, arr): m is string => Boolean(m) && arr.indexOf(m) === idx,
+      );
+      const voices = [process.env.LIARA_TTS_VOICE || process.env.OPENAI_TTS_VOICE || "echo", "onyx"].filter(
+        (v, idx, arr) => arr.indexOf(v) === idx,
+      );
+      const deadline = Date.now() + 18000;
+      for (const voice of voices) {
+        for (const model of models) {
+          if (Date.now() > deadline) {
+            logAi("tts: deadline reached");
+            return { ok: false as const, error: "tts_timeout" };
+          }
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 9000);
+          try {
+            const res = await fetch(`${baseUrl}/audio/speech`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model, voice, input: text, response_format: "mp3" }),
+              signal: controller.signal,
+            });
+            if (!res.ok) {
+              const body = (await res.text().catch(() => "")).slice(0, 300);
+              logAi("tts http", res.status, model, voice, body);
+              if (res.status === 401 || res.status === 403 || res.status === 429) {
+                return { ok: false as const, error: `tts_${res.status}` };
+              }
+              continue;
+            }
+            const ctype = (res.headers.get("content-type") || "").toLowerCase();
+            if (ctype.includes("application/json")) {
+              const body = (await res.json()) as { audio?: string; data?: string };
+              const b64 = body.audio || body.data;
+              if (b64) return { ok: true as const, audio: b64, mime: "audio/mpeg" };
+              logAi("tts json without audio", model, voice);
+              continue;
+            }
+            const buf = Buffer.from(await res.arrayBuffer());
+            if (buf.length < 200) {
+              logAi("tts tiny response", buf.length, model, voice);
+              continue;
+            }
+            return { ok: true as const, audio: buf.toString("base64"), mime: ctype.startsWith("audio/") ? ctype : "audio/mpeg" };
+          } catch (err) {
+            logAi("tts exception", model, voice, err instanceof Error ? err.message : String(err));
+          } finally {
+            clearTimeout(timeout);
+          }
+        }
+      }
+      return { ok: false as const, error: "tts_unavailable" };
+    } catch (err) {
+      logAi("tts outer exception", err instanceof Error ? err.message : String(err));
       return { ok: false as const, error: "tts_fail" };
     }
   });
