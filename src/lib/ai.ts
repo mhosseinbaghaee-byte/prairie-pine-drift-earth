@@ -5,6 +5,7 @@ import { langById, type Level } from "./topics";
 import { assistantSystemExtra } from "./assistants";
 import { LESSON_DIAGRAMS, diagramTag, matchDiagram } from "./lesson-diagrams";
 import { bankReply } from "./bank-first";
+import { brainLookup, brainRemember, isBankWorthyQuestion } from "./pouya-brain";
 import {
   findWikiImage,
   looksVisual,
@@ -261,7 +262,6 @@ async function chatComplete(
   return { ok: false, error: "all_providers_failed" };
 }
 
-/** تصویر: بانک شکل → جستجوی اینترنت (ویکی) — ازپیش‌تعریف لازم نیست */
 async function withLocalVisual(lastUser: string, text: string): Promise<string> {
   if (/\[diagram:/i.test(text) || /!\[[^\]]*\]\(https?:\/\//i.test(text)) return text;
   const d = matchDiagram(lastUser);
@@ -285,6 +285,13 @@ export const askPouya = createServerFn({ method: "POST" })
         m.role === "assistant" ? { ...m, content: m.content.replace(/!\[[^\]]*\]\([^)]*\)/g, "[تصویر]") } : m,
       );
 
+      if (!hasImage && !short && isBankWorthyQuestion(lastUser)) {
+        const learned = brainLookup(lastUser);
+        if (learned?.a) {
+          return { ok: true as const, text: await withLocalVisual(lastUser, learned.a), provider: "brain" };
+        }
+      }
+
       if (!hasImage && !short) {
         const b = bankReply({ messages: data.messages, mode: data.mode, lang: data.lang });
         if (b) return { ok: true as const, text: await withLocalVisual(lastUser, b), provider: "bank" };
@@ -302,6 +309,7 @@ export const askPouya = createServerFn({ method: "POST" })
         const wiki = await resolveWikiTags(text);
         text = wiki.text;
         if (!wiki.found) text = await withLocalVisual(lastUser, text);
+        brainRemember(lastUser, text);
         return { ok: true as const, text, provider: result.provider };
       }
 
