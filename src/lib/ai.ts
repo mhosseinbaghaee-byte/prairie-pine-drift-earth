@@ -126,7 +126,8 @@ function systemPrompt(
     `- ${levelLine(level)}\n` +
     `- مستقیم به همان سؤال جواب بده.\n` +
     `- مثل ربات کلمات کلیدی نباش.\n` +
-    `- اگر عکس/شکل/نقشه/هر چیز دیدنی خواست، تگ [wiki:عبارت انگلیسی کوتاه] بگذار. فقط محتوای جنسی ممنوع است.\n` +
+    `- اگر کاربر عکس/شکل/نقشه خواست: هرگز نگو «نمی‌توانم تصویر نشان دهم». در انتهای پاسخ فقط یک تگ [wiki:عبارت انگلیسی دقیق] بگذار (مثل [wiki:Iran map] یا [wiki:brain anatomy]). هرگز متن [تصویر] ننویس.\n` +
+    `- فقط محتوای جنسی ممنوع است.\n` +
     `- در صورت نیاز [diagram:id] از این‌ها: ${DIAGRAM_IDS}\n` +
     `- زبان پاسخ = زبان پیام کاربر.\n` +
     `- ${textbookStyleRules(level)}` +
@@ -263,12 +264,16 @@ async function chatComplete(
 }
 
 async function withLocalVisual(lastUser: string, text: string): Promise<string> {
+  text = text
+    .replace(/\[تصویر\]/g, "")
+    .replace(/متاسفانه[^\n]{0,80}تصویر[^\n]{0,120}/gi, "")
+    .replace(/نمی\s*توانم[^\n]{0,40}تصویر[^\n]{0,80}/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   if (/\[diagram:/i.test(text) || /!\[[^\]]*\]\(https?:\/\//i.test(text)) return text;
   const d = matchDiagram(lastUser);
   if (d) return `${text}\n\n${diagramTag(d.id)}`;
-  const q =
-    queryFromPersian(lastUser, true) ||
-    (looksVisual(lastUser) ? lastUser.replace(/[؟?!]/g, " ").trim().slice(0, 80) : null);
+  const q = queryFromPersian(lastUser, true);
   if (!q || q.length < 2) return text;
   const img = await findWikiImage(q);
   return img ? `${text}\n\n${wikiMarkdown(img)}` : text;
@@ -308,7 +313,11 @@ export const askPouya = createServerFn({ method: "POST" })
         let text = stripForeignImages(sanitizeStudentMath(result.text, data.level));
         const wiki = await resolveWikiTags(text);
         text = wiki.text;
-        if (!wiki.found) text = await withLocalVisual(lastUser, text);
+        if (!/!\[[^\]]*\]\(https?:\/\//i.test(text)) {
+          text = await withLocalVisual(lastUser, text);
+        } else {
+          text = text.replace(/\[تصویر\]/g, "").trim();
+        }
         brainRemember(lastUser, text);
         return { ok: true as const, text, provider: result.provider };
       }
