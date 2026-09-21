@@ -1,82 +1,95 @@
 # پویا — سند تحویل تیم (داخلی)
 
-> **این سند برای اعضای تیم است.** کلید API را اینجا ننویسید.
-
-آخرین به‌روزرسانی: ۲۰۲۶-۰۹-۱۹
+> **برای اعضای تیم.** کلید API اینجا نوشته نشود.  
+> آخرین به‌روزرسانی: ۲۰۲۶-۰۹-۲۱
 
 ---
 
 ## ۱) پروژه چیست؟
 
-**پویا (Pouya)** اپ آموزشی فارسی‌محور با شخصیت انیمیشنی:
+**پویا (Pouya)** اپ آموزشی فارسی با شخصیت انیمیشنی — چت، زبان، آزمون، مغز دوم، مکالمه صوتی، تصویر آموزشی.
 
-| بخش | کار |
-|-----|-----|
-| گفتگو | چت + پیوست عکس + تاریخچه محلی (زنگ/موضوع) |
-| زبان | تمرین مکالمه |
-| گفتگوی صوتی | TTS فقط گفتگو/صدا |
-| آزمون | کوییز عمومی + سازنده آزمون محلی + برنامه ۷روزه |
-| مغز دوم | یادداشت محلی |
-| مربی‌ها | مربیان داخلی + **درس با شکل** |
-| حساب | پروفایل + نقش دانش‌آموز/مربی (A1 محلی) + اشتراک آزمایشی |
-
-**دیپلوی:** `https://prairie-pine-drift-earth.vercel.app/`  
-**ریپو:** `mhosseinbaghaee-byte/prairie-pine-drift-earth` → شاخه `main`
+- ریپو: `mhosseinbaghaee-byte/prairie-pine-drift-earth`
+- پروداکشن: Vercel project `prairie-pine-drift-earth`
 
 ---
 
-## ۲) وضعیت ۲۰۲۶-۰۹-۱۹
+## ۲) مسیر جواب (منبع حقیقت)
 
-### انجام‌شده
-- UI موبایل، تم قرمز، ناوبری شیشه‌ای
-- AI: جمینی اول → لیارا؛ TTS لیارا
-- Vision پیوست عکس
-- بانک شکل فاز ۱ + `[diagram:id]` + UI «درس با شکل»
-- تاریخچه با فیلد `topic` (زنگ)
-- نقش/کلاس محلی (`classroom-local.ts`) در تب حساب
-- سازنده آزمون سفارشی + برنامه مرور ۷روزه (`custom-quiz.ts`)
-- سند فاز A نقش‌ها
+| اولویت | منبع | فایل |
+|--------|------|------|
+| 1 | مغز یادگیرنده | `src/lib/pouya-brain.ts` |
+| 2 | بانک ثابت (سلام/درس کوتاه) | `src/lib/bank-first.ts` |
+| 3 | Gemini | `src/lib/ai.ts` → `callGemini` |
+| 4 | لیارا (OpenAI-compatible) | `src/lib/ai.ts` → `callOpenAI` |
+| 5 | محلی | `library-reply` |
 
-### عمداً انجام نشد
-- اشتراک پرداخت واقعی
-- انتقال کامل به لیارا (هاست/DB)
-- بانک تصویر اسکن کتاب (مجوز هنوز کامل نشده)
+تصویر بعد از متن:
 
-### هشدار فنی
-- فایل اصلی UI: `pouya-main-app.tsx` فقط re-export است؛ منطق در `pouya-main-core.tsx`
-- هرگز فایل بزرگ را با محتوای خالی push نکنید
+1. تگ `[wiki:…]` مدل → `resolveWikiTags`
+2. بانک شکل `lesson-diagrams`
+3. جستجوی ویکی‌مدیا `findWikiImage`
 
----
+فیلتر تصویر: **فقط محتوای جنسی** (`wiki-image.ts`).
 
-## ۳) معماری سریع
+صدا:
 
-```
-src/components/
-  pouya-main-app.tsx      # export از core
-  pouya-main-core.tsx     # state اصلی تب‌ها / send / voice
-  pouya-chat-live.tsx
-  lesson-pane.tsx         # درس با شکل
-  coaches-pane.tsx        # مربی‌ها | درس با شکل
-  account-pane.tsx        # نقش/کلاس A1
-  pouya-quiz-vault.tsx
-  rich-text.tsx           # shape + diagram
-src/lib/
-  ai.ts / lesson-diagrams.ts / chat-history.ts
-  classroom-local.ts / custom-quiz.ts
-docs/TEAM-HANDOFF.md / phase-a-roles.md
-```
+- چت عادی: **بی‌صدا**
+- مکالمه صوتی (کله پویا): `speakPouya` + `OPENAI_TTS_KEY`
 
 ---
 
-## ۴) Env (نام‌ها)
+## ۳) env ضروری (Vercel Production)
 
-`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `OPENAI_TTS_*`, `GEMINI_API_KEY`
+- `GEMINI_API_KEY`
+- `GEMINI_MODELS` = `gemini-2.0-flash,gemini-2.5-flash,gemini-1.5-flash`
+- `AI_PROVIDER_ORDER` = `gemini,openai`
+- `OPENAI_API_KEY` + `OPENAI_BASE_URL` (لیارا) + `OPENAI_MODEL`
+- `OPENAI_TTS_KEY` (صدا)
+
+مدل‌های ساختگی مثل `gemini-3.5` استفاده نشود.
 
 ---
 
-## ۵) قانون تیم
+## ۴) UI اصلی
 
-1. قبل از push بزرگ: typecheck + تست موبایل چت
-2. کلید فقط Vercel
-3. تغییر حساب‌ها با به‌روز کردن `phase-a-roles.md`
-4. این سند را با هر milestone آپدیت کنید
+- هسته: `src/components/pouya-main-core.tsx`
+- تب‌ها: گفتگو · زبان · مربی‌ها · آزمون · مغز دوم · حساب
+- تم قرمز / شیشه‌ای موبایل‌محور
+
+---
+
+## ۵) چه کارهایی عمداً انجام نشده / نیمه‌کاره
+
+- حساب کامل مربی vs دانش‌آموز (نقشه در `phase-a-roles.md`)
+- دیتابیس ابری برای مغز یادگیرنده
+- انتقال کامل به هاست لیارا (فعلاً فقط API)
+
+---
+
+## ۶) اشتباهات تکراری که تکرار نکنید
+
+1. مدل Gemini نامعتبر در کد → همیشه fail → محلی
+2. ترتیب `bank` اول برای همه سؤال‌ها → حس ربات
+3. TTS در همه جا → سوخت توکن
+4. کامیت `PLACEHOLDER` به‌جای فایل کامل → اپ می‌شکند
+5. کلید در چت/README
+
+---
+
+## ۷) تست سریع سلامت
+
+1. سؤال آزاد: «مغز چه کاری می‌کند؟» → جواب طبیعی، نه پیام «اتصال مدل در دسترس نیست»
+2. «سیاه چاله را نشان بده» → تصویر ویکی (در صورت وجود)
+3. چت عادی → بدون صدا
+4. مکالمه صوتی → TTS (اگر کلید TTS سالم باشد)
+
+---
+
+## ۸) دستور کار عضو جدید
+
+1. README ریشه را بخوان
+2. این سند + `phase-a-roles.md`
+3. env را از مالک پروژه بگیر (نه از گیت)
+4. `npm install && npm run dev`
+5. قبل از PR بزرگ: مسیر `askPouya` را دست نزن مگر تست شده باشد
