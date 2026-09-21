@@ -59,9 +59,7 @@ function geminiModels(): string[] {
 function logAi(...args: unknown[]) {
   console.error("[pouya-ai]", ...args);
 }
-/** Gemini رایگان اول، بعد لیارا */
 const DEFAULT_ORDER: ProviderId[] = ["gemini", "openai"];
-
 const DIAGRAM_IDS = LESSON_DIAGRAMS.map((d) => d.id).join(", ");
 
 function levelLine(level: Level) {
@@ -75,7 +73,6 @@ function textbookStyleRules(level: Level) {
     `سبک کتاب درسی فارسی:\n` +
     `- بدون LaTeX و بدون علامت دلار ($). هرگز $ یا $$ نگذار.\n` +
     `- sin/cos/tan/cot و π مجاز. کسر را ساده بنویس مثل (۱) ÷ (۲).\n` +
-    `- به جای $2\\pi$ بنویس ۲π. به جای $x = \\pi/2$ بنویس x = π/2.\n` +
     (level === "kid" ? `- خیلی ساده و خودمانی.\n` : `- واضح و مرحله‌ای.\n`)
   );
 }
@@ -86,10 +83,6 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\\pi\b/gi, "π");
   t = t.replace(/\\times\b/gi, "×");
   t = t.replace(/\\cdot\b/gi, "·");
-  t = t.replace(/\\leq\b/gi, "≤");
-  t = t.replace(/\\geq\b/gi, "≥");
-  t = t.replace(/\\neq\b/gi, "≠");
-  t = t.replace(/\\infty\b/gi, "∞");
   t = t.replace(/\$\$([\s\S]*?)\$\$/g, "$1");
   t = t.replace(/\$([^$]+)\$/g, "$1");
   t = t.replace(/\$/g, "");
@@ -97,9 +90,7 @@ function sanitizeStudentMath(text: string, level: Level): string {
   t = t.replace(/\\\[|\\\]/g, "");
   t = t.replace(/\\\(|\\\)/g, "");
   t = t.replace(/\{([^{}]*)\}/g, "$1");
-  t = t.replace(/[ \t]+\n/g, "\n");
   t = t.replace(/\n{3,}/g, "\n\n");
-  t = t.replace(/[ \t]{2,}/g, " ");
   return t.trim();
 }
 
@@ -122,42 +113,32 @@ function systemPrompt(
   const lang = langById(langId || "fa");
   const coach = assistantSystemExtra(assistantId);
   const vision = hasImage
-    ? `\n- کاربر تصویر/جزوه/برگه فرستاده. تصویر را دقیق ببین و تحلیل کن.\n` +
-      `- برگه امتحان یا تست: سؤال‌ها را بخوان، مرحله‌به‌مرحله حل کن.\n` +
-      `- تمرین دست‌نویس: خطا را پیدا کن و راه درست را ساده بگو.\n` +
-      `- نمودار: محورها و نقاط مهم؛ در صورت نیاز [graph:عبارت].\n` +
-      `- نگو «فقط شکل هندسی می‌فهمم».`
+    ? `\n- کاربر تصویر فرستاده؛ دقیق ببین و تحلیل کن. نگو فقط شکل هندسی می‌فهمم.`
     : "";
   const memory =
     learningBrief && learningBrief.trim()
-      ? `\nحافظه یادگیری این دانش‌آموز (موضوع سؤال فعلی را عوض نکن):\n${learningBrief.trim()}\n`
+      ? `\nحافظه یادگیری:\n${learningBrief.trim()}\n`
       : "";
   const base =
     `تو «پویا» هستی: مربی زنده آموزش برای دانش‌آموزان ایران.\n` +
-    `قوانین سخت:\n` +
+    `قوانین:\n` +
     `- ${levelLine(level)}\n` +
-    `- همیشه مستقیماً به همان سؤال کاربر جواب بده. موضوع را عوض نکن.\n` +
-    `- مثل ربات کلمات کلیدی نباش؛ سؤال بچه را بفهم و کامل و مهربان جواب بده، حتی اگر موضوع از قبل پیش‌بینی نشده.\n` +
-    `- برای توضیح تابع ریاضی ساده، در صورت مفید بودن [graph:عبارت] بگذار (مثل [graph:sin(x)]).\n` +
-    `- برای نمایش تصویر واقعی یا شکل علمی فقط تگ [wiki:عبارت انگلیسی کوتاه] بگذار.\n` +
-    `- فقط اگر id یکی از این‌هاست [diagram:id] بگذار: ${DIAGRAM_IDS}.\n` +
+    `- مستقیم به همان سؤال جواب بده.\n` +
+    `- مثل ربات کلمات کلیدی نباش.\n` +
+    `- اگر عکس/شکل/نقشه/هر چیز دیدنی خواست، تگ [wiki:عبارت انگلیسی کوتاه] بگذار. فقط محتوای جنسی ممنوع است.\n` +
+    `- در صورت نیاز [diagram:id] از این‌ها: ${DIAGRAM_IDS}\n` +
     `- زبان پاسخ = زبان پیام کاربر.\n` +
     `- ${textbookStyleRules(level)}` +
     vision +
     memory +
     (coach ? `\n\n${coach}` : "");
-  if (mode === "live" || mode === "language") {
-    return `${base}\nحالت تمرین زبان (${lang.native}).`;
-  }
+  if (mode === "live" || mode === "language") return `${base}\nحالت تمرین زبان (${lang.native}).`;
   return base;
 }
 
 type OpenAIContent =
   | string
-  | Array<
-      | { type: "text"; text: string }
-      | { type: "image_url"; image_url: { url: string } }
-    >;
+  | Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }>;
 
 async function callOpenAI(
   system: string,
@@ -171,10 +152,7 @@ async function callOpenAI(
     .replace(/\/+$/, "")
     .replace(/\/chat\/completions$/, "");
   const model = process.env.LIARA_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
-  if (!key) {
-    logAi("openai: OPENAI_API_KEY missing");
-    return { ok: false, error: "no_openai_key" };
-  }
+  if (!key) return { ok: false, error: "no_openai_key" };
   const messages: { role: string; content: OpenAIContent }[] = [{ role: "system", content: system }];
   const lastIdx = history.length - 1;
   for (let i = 0; i < history.length; i++) {
@@ -187,9 +165,7 @@ async function callOpenAI(
           { type: "image_url", image_url: { url: imageDataUrl } },
         ],
       });
-    } else {
-      messages.push({ role: m.role, content: m.content });
-    }
+    } else messages.push({ role: m.role, content: m.content });
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), imageDataUrl ? 45000 : 15000);
@@ -201,18 +177,13 @@ async function callOpenAI(
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) {
-      const body = (await res.text().catch(() => "")).slice(0, 300);
-      logAi("openai http", res.status, model, body);
-      return { ok: false, error: `openai_${res.status}` };
-    }
+    if (!res.ok) return { ok: false, error: `openai_${res.status}` };
     const json = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const text = json.choices?.[0]?.message?.content?.trim();
     if (!text) return { ok: false, error: "openai_empty" };
     return { ok: true, text, provider: "openai" };
-  } catch (err) {
+  } catch {
     clearTimeout(timeout);
-    logAi("openai exception", err instanceof Error ? err.message : String(err));
     return { ok: false, error: "openai_fail" };
   }
 }
@@ -224,10 +195,7 @@ async function callGemini(
   imageDataUrl?: string,
 ): Promise<ChatResult> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    logAi("gemini: GEMINI_API_KEY missing");
-    return { ok: false, error: "no_gemini_key" };
-  }
+  if (!key) return { ok: false, error: "no_gemini_key" };
   const parsed = imageDataUrl ? parseDataUrl(imageDataUrl) : null;
   const contents = history.map((m, i) => {
     const role = m.role === "assistant" ? "model" : "user";
@@ -256,13 +224,9 @@ async function callGemini(
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      if (res.status === 401 || res.status === 403) {
-        return { ok: false, error: `gemini_auth_${res.status}` };
-      }
+      if (res.status === 401 || res.status === 403) return { ok: false, error: `gemini_auth_${res.status}` };
       if (!res.ok) continue;
-      const json = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
+      const json = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim();
       if (text) return { ok: true, text, provider: `gemini:${model}` };
     } catch {
@@ -293,24 +257,19 @@ async function chatComplete(
         ? await callOpenAI(system, history, maxTokens, imageDataUrl)
         : await callGemini(system, history, maxTokens, imageDataUrl);
     if (r.ok) return r;
-    logAi("provider failed:", p, r.error);
   }
   return { ok: false, error: "all_providers_failed" };
 }
 
-function attachDiagramIfUseful(userText: string, reply: string): string {
-  if (/\[diagram:/i.test(reply)) return reply;
-  const d = matchDiagram(userText) || matchDiagram(reply.slice(0, 280));
-  if (!d) return reply;
-  return `${reply}\n\n${diagramTag(d.id)}`;
-}
-
+/** تصویر: بانک شکل → جستجوی اینترنت (ویکی) — ازپیش‌تعریف لازم نیست */
 async function withLocalVisual(lastUser: string, text: string): Promise<string> {
   if (/\[diagram:/i.test(text) || /!\[[^\]]*\]\(https?:\/\//i.test(text)) return text;
   const d = matchDiagram(lastUser);
   if (d) return `${text}\n\n${diagramTag(d.id)}`;
-  const q = looksVisual(lastUser) ? queryFromPersian(lastUser) : null;
-  if (!q) return text;
+  const q =
+    queryFromPersian(lastUser, true) ||
+    (looksVisual(lastUser) ? lastUser.replace(/[؟?!]/g, " ").trim().slice(0, 80) : null);
+  if (!q || q.length < 2) return text;
   const img = await findWikiImage(q);
   return img ? `${text}\n\n${wikiMarkdown(img)}` : text;
 }
@@ -326,15 +285,11 @@ export const askPouya = createServerFn({ method: "POST" })
         m.role === "assistant" ? { ...m, content: m.content.replace(/!\[[^\]]*\]\([^)]*\)/g, "[تصویر]") } : m,
       );
 
-      // ۱) بانک ثابت فقط برای سلام / درس خیلی کوتاه
       if (!hasImage && !short) {
         const b = bankReply({ messages: data.messages, mode: data.mode, lang: data.lang });
-        if (b) {
-          return { ok: true as const, text: await withLocalVisual(lastUser, b), provider: "bank" };
-        }
+        if (b) return { ok: true as const, text: await withLocalVisual(lastUser, b), provider: "bank" };
       }
 
-      // ۲) Gemini رایگان → لیارا
       const result = await chatComplete(
         systemPrompt(data.level, data.mode, data.lang, data.assistantId, hasImage, data.learningBrief),
         history,
@@ -365,8 +320,7 @@ export const makeQuiz = createServerFn({ method: "POST" })
   .validator((input: unknown) => QuizInput.parse(input))
   .handler(async ({ data }) => {
     try {
-      const quiz = localQuiz(data.topic);
-      return { ok: true as const, quiz };
+      return { ok: true as const, quiz: localQuiz(data.topic) };
     } catch {
       return { ok: false as const, error: "quiz_fail" };
     }
