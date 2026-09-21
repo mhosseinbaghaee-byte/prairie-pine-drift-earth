@@ -5,11 +5,11 @@
 export type WikiImage = { url: string; alt: string; label: string };
 
 const UA = "PouyaApp/1.0 (educational app; https://prairie-pine-drift-earth.vercel.app)";
-/** فقط محتوای جنسی — بقیه موضوعات آزاد */
 const EN_BLOCK =
   /\b(nud(e|ity)|sex(ual|y)?|erotic|porn\w*|genital\w*|penis|vagina|vulva|breasts?\b|bikini|lingerie|hentai|xxx|nsfw)\b/i;
 const FA_BLOCK = /(برهنه|پورن|سکس|آلت\s*تناسلی|شهوت|جنسی)/;
-const JUNK_TITLE = /(logo|icon|flag of|coat of arms|signature|question mark|commons-|wikipedia-|wikimedia-|stub|placeholder)/i;
+const JUNK_TITLE =
+  /(logo|icon|flag of|coat of arms|signature|question mark|commons-|wikipedia-|wikimedia-|stub|placeholder|laurel|hardy)/i;
 const UPLOAD = "https://upload.wikimedia.org/";
 
 const cache = new Map<string, { at: number; v: WikiImage | null }>();
@@ -70,14 +70,14 @@ async function commonsImage(q: string): Promise<WikiImage | null> {
   });
   const j = await getJson<{ query?: { pages?: CommonsPage[] } }>(
     `https://commons.wikimedia.org/w/api.php?${params.toString()}`,
-    3500,
+    4000,
   );
   const pages = (j?.query?.pages ?? []).slice().sort((a, b) => (a.index ?? 999) - (b.index ?? 999));
   for (const p of pages) {
     const info = p.imageinfo?.[0];
     if (!info) continue;
     if (!["image/jpeg", "image/png", "image/svg+xml"].includes(info.mime || "")) continue;
-    if ((info.width ?? 0) < 300) continue;
+    if ((info.width ?? 0) < 280) continue;
     const thumb = info.thumburl || info.url || "";
     if (!thumb.startsWith(UPLOAD)) continue;
     const name = p.title.replace(/^File:/i, "").replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ");
@@ -105,19 +105,19 @@ async function faWikiImage(q: string): Promise<WikiImage | null> {
     generator: "search",
     gsrsearch: q,
     gsrnamespace: "0",
-    gsrlimit: "6",
+    gsrlimit: "8",
     prop: "pageimages",
     piprop: "thumbnail",
     pithumbsize: "900",
   });
   const j = await getJson<{
     query?: { pages?: { title: string; index?: number; thumbnail?: { source?: string } }[] };
-  }>(`https://fa.wikipedia.org/w/api.php?${params.toString()}`, 2500);
+  }>(`https://fa.wikipedia.org/w/api.php?${params.toString()}`, 3000);
   const pages = (j?.query?.pages ?? []).slice().sort((a, b) => (a.index ?? 999) - (b.index ?? 999));
   for (const p of pages) {
     const src = p.thumbnail?.source || "";
     if (!src.startsWith(UPLOAD) || !src.includes("/wikipedia/commons/")) continue;
-    if (FA_BLOCK.test(p.title)) continue;
+    if (FA_BLOCK.test(p.title) || JUNK_TITLE.test(p.title)) continue;
     return {
       url: safeUrl(src),
       alt: cleanLabel(p.title, 60),
@@ -134,9 +134,13 @@ export async function findWikiImage(query: string): Promise<WikiImage | null> {
   const key = q.toLowerCase();
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.v;
+
   let img = await commonsImage(q);
+  if (!img) img = await commonsImage(`${q} map`);
+  if (!img) img = await commonsImage(`${q} diagram`);
+  if (!img) img = await commonsImage(`${q} anatomy`);
   if (!img && /[\u0600-\u06FF]/.test(q)) img = await faWikiImage(q);
-  if (!img && /[\u0600-\u06FF]/.test(q)) img = await commonsImage(q + " diagram");
+
   if (cache.size > 200) cache.clear();
   cache.set(key, { at: Date.now(), v: img });
   return img;
@@ -147,7 +151,9 @@ export function wikiMarkdown(img: WikiImage): string {
 }
 
 export function stripForeignImages(text: string): string {
-  return text.replace(/!\[[^\]]*\]\(([^)]*)\)/g, (m, url: string) => (url.trim().startsWith(UPLOAD) ? m : ""));
+  return text.replace(/!\[[^\]]*\]\(([^)]*)\)/g, (m, url: string) =>
+    url.trim().startsWith(UPLOAD) ? m : "",
+  );
 }
 
 export async function resolveWikiTags(text: string): Promise<{ text: string; found: boolean }> {
@@ -158,7 +164,9 @@ export async function resolveWikiTags(text: string): Promise<{ text: string; fou
   if (EN_BLOCK.test(rawQuery) || FA_BLOCK.test(rawQuery)) {
     return { text: text.replace(re, "").replace(/\n{3,}/g, "\n\n").trim(), found: false };
   }
-  const q = /[\u0600-\u06FF]/.test(rawQuery) ? (queryFromPersian(rawQuery, true) ?? rawQuery) : rawQuery;
+  const q = /[\u0600-\u06FF]/.test(rawQuery)
+    ? queryFromPersian(rawQuery, true) ?? rawQuery
+    : rawQuery;
   const img = q ? await findWikiImage(q) : null;
   let used = false;
   const out = text.replace(re, () => {
@@ -172,71 +180,112 @@ export async function resolveWikiTags(text: string): Promise<{ text: string; fou
 }
 
 const VISUAL_RE =
-  /(عکس|تصویر|شکل|نمودار|برش|نقشه|ساختار|اجزا|نشان\s*بده|نشون\s*بده|نشونم|ببینم|دیاگرام|طرح|چهره|gallery|photo|picture|map|diagram)/i;
+  /(عکس|تصویر|شکل|نمودار|برش|نقشه|ساختار|اجزا|نشان\s*بده|نشون\s*بده|نشونم|ببینم|دیاگرام|طرح|چهره|gallery|photo|picture|map|diagram|تصاویر)/i;
 
 export function looksVisual(text: string): boolean {
   if (VISUAL_RE.test(text)) return true;
-  if (/(را\s+)?(نشون|نشان)\s*(بده|بدهید|ده)/.test(text)) return true;
+  if (/(را\s+)?(نشون|نشان)\s*(بده|بدهید|ده|نمیدی|نمیده)/.test(text)) return true;
   if (/\b(show|image|photo|picture|map of)\b/i.test(text)) return true;
   return false;
 }
 
 const FA_EN: [string, string][] = [
-  ["ستون فقرات", "vertebral column"], ["منظومه شمسی", "solar system"], ["دستگاه گوارش", "digestive system"],
-  ["دستگاه عصبی", "nervous system"], ["دستگاه تنفس", "respiratory system"], ["دستگاه گردش خون", "circulatory system"],
-  ["جدول تناوبی", "periodic table"], ["چرخه آب", "water cycle"],
-  ["سلول گیاهی", "plant cell"], ["سلول جانوری", "animal cell"], ["دی ان ای", "DNA"], ["فتوسنتز", "photosynthesis"],
-  ["برش افقی", "axial section"], ["برش عرضی", "cross section"], ["برش", "section"],
-  ["مغز", "brain"], ["قلب", "heart"], ["ریه", "lung"], ["کلیه", "kidney"], ["کبد", "liver"], ["معده", "stomach"],
-  ["استخوان", "bone"], ["ماهیچه", "muscle"], ["عضله", "muscle"], ["سلول", "cell"], ["نورون", "neuron"],
-  ["اتم", "atom"], ["مولکول", "molecule"], ["خورشید", "sun"], ["ماه", "moon"], ["زمین", "earth"],
-  ["نقشه", "map"], ["سیاه چاله", "black hole"], ["سیاه‌چاله", "black hole"], ["ابر کومولوس", "cumulus cloud"],
-  ["کومولوس", "cumulus"], ["آمریکا", "United States map"], ["ایالات متحده", "United States map"],
-  ["نقشه آمریکا", "United States map"], ["کهکشان", "galaxy"], ["مریخ", "Mars"], ["مشتری", "Jupiter"],
+  ["نقشه ایران", "Iran map"],
+  ["نقشه آمریکا", "United States map"],
+  ["نقشه جهان", "world map"],
+  ["برش افقی مغز", "brain axial section"],
+  ["برش عمودی مغز", "brain sagittal section"],
+  ["برش مغز", "brain section anatomy"],
+  ["تصویر مغز", "brain anatomy"],
+  ["عکس مغز", "brain anatomy"],
+  ["اتم رادیواکتیو", "radioactive atom diagram"],
+  ["اتم پرتوزا", "radioactive atom diagram"],
+  ["جدول تناوبی", "periodic table"],
+  ["سیاه چاله", "black hole"],
+  ["سیاه‌چاله", "black hole"],
+  ["ابر کومولوس", "cumulus cloud"],
+  ["سلول گیاهی", "plant cell"],
+  ["سلول جانوری", "animal cell"],
+  ["منظومه شمسی", "solar system"],
+  ["دستگاه گوارش", "digestive system"],
+  ["دستگاه عصبی", "nervous system"],
+  ["دستگاه تنفس", "respiratory system"],
+  ["دستگاه گردش خون", "circulatory system"],
+  ["ستون فقرات", "vertebral column"],
+  ["چرخه آب", "water cycle"],
+  ["دی ان ای", "DNA"],
+  ["فتوسنتز", "photosynthesis"],
+  ["ایالات متحده", "United States map"],
+  ["اکتینیوم", "actinium element"],
+  ["رادیواکتیو", "radioactivity diagram"],
+  ["مغز", "brain anatomy"],
+  ["قلب", "heart anatomy"],
+  ["ریه", "lung anatomy"],
+  ["کلیه", "kidney anatomy"],
+  ["کبد", "liver anatomy"],
+  ["معده", "stomach anatomy"],
+  ["استخوان", "bone anatomy"],
+  ["ماهیچه", "muscle anatomy"],
+  ["عضله", "muscle anatomy"],
+  ["سلول", "cell biology"],
+  ["نورون", "neuron diagram"],
+  ["اتم", "atom diagram"],
+  ["مولکول", "molecule diagram"],
+  ["خورشید", "sun"],
+  ["ماه", "moon"],
+  ["زمین", "Earth"],
+  ["کهکشان", "galaxy"],
+  ["مریخ", "Mars"],
+  ["مشتری", "Jupiter"],
+  ["آمریکا", "United States map"],
+  ["ایران", "Iran map"],
+  ["نقشه", "map"],
+  ["برش", "section anatomy"],
+  ["کومولوس", "cumulus"],
 ];
 
 const FILLER = new Set(
-  ("با توضیح کامل بده بدین بگو رو را از این آن یک چیست چی هست است نشون نشان بدید عکس تصویر شکل نمودار ساختار اجزا و در به برای ببینم چطور چگونه کار می‌کند میکند")
-    .split(" "),
+  (
+    "با توضیح کامل بده بدین بگو رو را از این آن یک چیست چی هست است نشون نشان بدید " +
+    "عکس تصویر شکل نمودار ساختار اجزا و در به برای ببینم چطور چگونه کار می‌کند میکند " +
+    "سلام درود پویا لطفا میشه خواهشا نشونم نشون نمیدی چرا نمیدی کو"
+  ).split(" "),
 );
 
 const norm = (s: string) =>
   s.replace(/\u200c/g, " ").replace(/[؟?!.,،؛:()«»"']/g, " ").replace(/\s+/g, " ").trim();
 
-/** از متن کاربر عبارت جستجو می‌سازد — ازپیش‌تعریف لازم نیست */
 export function queryFromPersian(text: string, loose = false): string | null {
   let t = norm(text);
-  const subjects: string[] = [];
-  const mods: string[] = [];
+  const found: string[] = [];
   const keys = [...FA_EN].sort((a, b) => norm(b[0]).length - norm(a[0]).length);
   for (const [fa, en] of keys) {
     const k = norm(fa);
-    let hit = false;
     if (k.includes(" ")) {
       if (t.includes(k)) {
-        hit = true;
+        found.push(en);
         t = t.replace(k, " ");
       }
     } else {
-      const toks = t.split(" ");
+      const toks = t.split(" ").filter(Boolean);
       const idx = toks.findIndex(
         (x) => x === k || x === k + "ها" || x === k + "های" || x === k + "ی" || x === k + "ام",
       );
       if (idx >= 0) {
-        hit = true;
+        found.push(en);
         toks.splice(idx, 1);
         t = toks.join(" ");
       }
     }
-    if (hit) (en.includes("section") ? mods : subjects).push(en);
+    if (found.length >= 2) break;
   }
-  const terms = [...subjects.slice(0, 2), ...mods.slice(0, 1)];
-  if (terms.length) return terms.join(" ");
+  if (found.length) return found.slice(0, 2).join(" ");
+
   if (!loose && !looksVisual(text)) return null;
   const rest = norm(text)
     .split(" ")
     .filter((w) => w.length > 1 && !FILLER.has(w))
-    .slice(0, 6)
+    .slice(0, 5)
     .join(" ");
   return rest.length >= 2 ? rest : null;
 }
