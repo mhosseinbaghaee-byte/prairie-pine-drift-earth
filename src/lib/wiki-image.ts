@@ -165,13 +165,25 @@ export function stripForeignImages(text: string): string {
   );
 }
 
+/** تگ‌های کامل و ناقص ویکی را پاک کن / جایگزین کن */
+export function stripBrokenWikiTags(text: string): string {
+  return text
+    .replace(/\[wiki:[^\]]{0,200}$/gi, "")
+    .replace(/\[wiki:\s*\]/gi, "")
+    .replace(/\[wiki:[^\]\n]{0,200}(?!\])/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export async function resolveWikiTags(text: string): Promise<{ text: string; found: boolean }> {
   const re = /\[wiki:([^\]]{1,120})\]/gi;
   const tags = [...text.matchAll(re)];
-  if (!tags.length) return { text, found: false };
+  if (!tags.length) {
+    return { text: stripBrokenWikiTags(text), found: false };
+  }
   const rawQuery = tags[0][1].replace(/[^\p{L}\p{N} -]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 70);
   if (EN_BLOCK.test(rawQuery) || FA_BLOCK.test(rawQuery)) {
-    return { text: text.replace(re, "").replace(/\n{3,}/g, "\n\n").trim(), found: false };
+    return { text: stripBrokenWikiTags(text.replace(re, "")), found: false };
   }
   const q = /[\u0600-\u06FF]/.test(rawQuery)
     ? queryFromPersian(rawQuery, true) ?? rawQuery
@@ -185,7 +197,7 @@ export async function resolveWikiTags(text: string): Promise<{ text: string; fou
     }
     return "";
   });
-  return { text: out.replace(/\n{3,}/g, "\n\n").trim(), found: Boolean(img) };
+  return { text: stripBrokenWikiTags(out.replace(/\n{3,}/g, "\n\n").trim()), found: Boolean(img) };
 }
 
 const VISUAL_RE =
