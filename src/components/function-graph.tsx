@@ -5,62 +5,39 @@ type Props = {
   className?: string;
 };
 
-/** عبارت‌های ساده: x, اعداد, + - * / ^, sin cos tan sqrt abs log exp, پرانتز، ضرب ضمنی */
+/** عبارت‌های رایج کتاب درسی: x², 1/x, e^x, log, |x|, sin, ضرب ضمنی */
 function compile(expr: string): ((x: number) => number) | null {
   let e = expr.trim().toLowerCase().replace(/\s+/g, "");
-  if (!e || e.length > 100) return null;
-
-  // یونیکد و نمادهای رایج
-  e = e
-    .replace(/[²]/g, "^2")
-    .replace(/[³]/g, "^3")
-    .replace(/[×·]/g, "*")
-    .replace(/[÷]/g, "/")
-    .replace(/[−–—]/g, "-")
-    .replace(/π/g, "pi")
-    .replace(/\|/g, ""); // |x| → بعداً abs
-
-  // |x| یا |expr|
-  e = e.replace(/\|([^|]+)\|/g, "abs($1)");
-
+  if (!e || e.length > 80) return null;
+  // یونیکد توان و قدرمطلق
+  e = e.replace(/x²/g, "x**2").replace(/x³/g, "x**3");
+  e = e.replace(/²/g, "**2").replace(/³/g, "**3");
+  e = e.replace(/\|([^|]+)\|/g, "Math.abs($1)");
   e = e.replace(/\^/g, "**");
-  e = e.replace(/\bpi\b/g, "Math.PI");
-  e = e.replace(/\be\b(?![a-z])/g, "Math.E");
-
+  e = e.replace(/π/g, "Math.PI").replace(/\bpi\b/g, "Math.PI");
   // توابع
-  e = e.replace(/\blog\b/g, "Math.log10");
-  e = e.replace(/\bln\b/g, "Math.log");
-  e = e.replace(/\bexp\b/g, "Math.exp");
-  e = e.replace(/\bsin\b/g, "Math.sin");
-  e = e.replace(/\bcos\b/g, "Math.cos");
-  e = e.replace(/\btan\b/g, "Math.tan");
-  e = e.replace(/\bsqrt\b/g, "Math.sqrt");
-  e = e.replace(/\babs\b/g, "Math.abs");
-
-  // ضرب ضمنی: 2x → 2*x ، 2sin → 2*Math.sin ، )x → )*x ، x( → x*(
-  e = e.replace(/(\d)(Math\.|x|\()/g, "$1*$2");
-  e = e.replace(/(\))(\d|Math\.|x|\()/g, "$1*$2");
-  e = e.replace(/(x)(\()/g, "$1*$2");
-  e = e.replace(/(x)(Math\.)/g, "$1*$2");
-
-  // فقط کاراکترهای مجاز
-  if (/[^0-9xMath.PIE\+\-\*\/\(\)_,sincotaqrbplg]/.test(e)) return null;
-
+  e = e.replace(/\be\^x\b/g, "Math.exp(x)");
+  e = e.replace(/\bexp\(/g, "Math.exp(");
+  e = e.replace(/\blog\(/g, "Math.log(");
+  e = e.replace(/\bln\(/g, "Math.log(");
+  e = e.replace(/\bsin\(/g, "Math.sin(");
+  e = e.replace(/\bcos\(/g, "Math.cos(");
+  e = e.replace(/\btan\(/g, "Math.tan(");
+  e = e.replace(/\bsqrt\(/g, "Math.sqrt(");
+  e = e.replace(/\babs\(/g, "Math.abs(");
+  // ضرب ضمنی: 2x → 2*x ، )x → )*x ، x( → x*(
+  e = e.replace(/(\d)x/g, "$1*x");
+  e = e.replace(/\)x/g, ")*x");
+  e = e.replace(/x\(/g, "x*(");
+  e = e.replace(/(\d)\(/g, "$1*(");
+  // فقط کاراکترهای مجاز بعد از جایگزینی
+  if (/[^0-9xMath.\+\-\*\(\)_,PIexpnclogabsinqrt]/.test(e.replace(/\*\*/g, ""))) return null;
   try {
-    const fn = new Function("x", `"use strict"; return (${e});`) as (x: number) => number;
-    // چند نقطه تست
-    for (const tx of [0.5, 1, -1, 2]) {
-      const test = fn(tx);
-      if (typeof test !== "number" || Number.isNaN(test)) {
-        // 1/x در صفر NaN است — فقط اگر همه نقاط بد باشند رد کن
-        continue;
-      }
-      return fn;
-    }
-    // حداقل یک نقطه معتبر
-    const t0 = fn(1);
-    if (typeof t0 === "number" && Number.isFinite(t0)) return fn;
-    return null;
+    // eslint-disable-next-line no-new-func
+    const fn = new Function("x", `return (${e});`) as (x: number) => number;
+    const test = fn(0.5);
+    if (typeof test !== "number" || Number.isNaN(test)) return null;
+    return fn;
   } catch {
     return null;
   }
@@ -78,7 +55,7 @@ export function FunctionGraph({ expr, className }: Props) {
     const pts: { x: number; y: number }[] = [];
     let yMin = Infinity;
     let yMax = -Infinity;
-    const steps = 160;
+    const steps = 120;
     for (let i = 0; i <= steps; i++) {
       const x = xMin + ((xMax - xMin) * i) / steps;
       let y: number;
@@ -88,44 +65,22 @@ export function FunctionGraph({ expr, className }: Props) {
         continue;
       }
       if (!Number.isFinite(y)) continue;
-      // جلوگیری از مقادیر خیلی بزرگ که محور را خراب می‌کند
-      if (Math.abs(y) > 1e6) continue;
       pts.push({ x, y });
       yMin = Math.min(yMin, y);
       yMax = Math.max(yMax, y);
     }
     if (pts.length < 2) return null;
+    // padding y
     if (yMin === yMax) {
       yMin -= 1;
       yMax += 1;
     }
-    // محدود کردن دامنه y برای توابع با مجانب
-    const span = yMax - yMin;
-    if (span > 40) {
-      const mid = (yMin + yMax) / 2;
-      yMin = mid - 20;
-      yMax = mid + 20;
-      // فقط نقاط داخل بازه
-      const filtered = pts.filter((p) => p.y >= yMin && p.y <= yMax);
-      if (filtered.length >= 2) {
-        pts.length = 0;
-        pts.push(...filtered);
-        yMin = Math.min(...pts.map((p) => p.y));
-        yMax = Math.max(...pts.map((p) => p.y));
-        if (yMin === yMax) {
-          yMin -= 1;
-          yMax += 1;
-        }
-      }
-    }
-    const yPad = (yMax - yMin) * 0.1 || 0.5;
+    const yPad = (yMax - yMin) * 0.1;
     yMin -= yPad;
     yMax += yPad;
     const toX = (x: number) => pad + ((x - xMin) / (xMax - xMin)) * (W - 2 * pad);
     const toY = (y: number) => H - pad - ((y - yMin) / (yMax - yMin)) * (H - 2 * pad);
-    const d = pts
-      .map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.x).toFixed(1)},${toY(p.y).toFixed(1)}`)
-      .join(" ");
+    const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.x).toFixed(1)},${toY(p.y).toFixed(1)}`).join(" ");
     const x0 = toX(0);
     const y0 = toY(0);
     return { W, H, d, x0, y0, pad, expr };
@@ -134,7 +89,7 @@ export function FunctionGraph({ expr, className }: Props) {
   if (!data) {
     return (
       <p className="my-2 text-xs text-fg-muted" dir="rtl">
-        نمودار «{expr}» رسم نشد (عبارت ساده‌تر بنویس: مثلاً x^2 یا sin(x) یا 1/x).
+        نمودار «{expr}» رسم نشد (عبارت ساده‌تر بنویس: مثلاً x^2 یا sin(x)).
       </p>
     );
   }
