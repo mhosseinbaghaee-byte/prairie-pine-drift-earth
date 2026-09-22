@@ -60,17 +60,26 @@ function write(m: LearningMemory) {
   }
 }
 
-/** استخراج موضوع ساده از متن کاربر */
+/** الگوهای تزریق / یخ‌زدن که هرگز نباید موضوع یا brief شوند */
+const BLOCKED =
+  /(ignore\s+all|system\s*prompt|you\s+are\s+now|\bconstructor\b|Object\s*\(|function\s*\(|__proto__|prototype\s*=|eval\s*\(|<script|javascript:)/i;
+
+/** استخراج موضوع ساده از متن کاربر — فقط کلمات ایمن */
 export function inferTopic(text: string): string {
   const t = text.replace(/\s+/g, " ").trim();
-  if (!t) return "عمومی";
+  if (!t || BLOCKED.test(t)) return "عمومی";
   const line = t.split("\n").map((l) => l.trim()).find(Boolean) || t;
   const cleaned = line
     .replace(/\[تصویر[^\]]*\]/g, "")
     .replace(/https?:\/\/\S+/g, "")
-    .replace(/[*`#_]/g, "")
+    .replace(/[*`#_<>{}\[\]()]/g, " ")
+    .replace(/\b(constructor|prototype|__proto__|function|Object)\b/gi, " ")
+    .replace(/\s+/g, " ")
     .trim();
-  return cleaned.slice(0, 48) || "عمومی";
+  if (!cleaned || BLOCKED.test(cleaned)) return "عمومی";
+  // فقط حروف، اعداد، فاصله و علائم فارسی/انگلیسی رایج
+  const safe = cleaned.replace(/[^\p{L}\p{N}\s\-_.،؟?]/gu, " ").replace(/\s+/g, " ").trim();
+  return (safe.slice(0, 48) || "عمومی");
 }
 
 export function noteInteraction(input: {
@@ -80,6 +89,7 @@ export function noteInteraction(input: {
   markStrong?: boolean;
 }) {
   const topic = inferTopic(input.userText);
+  if (topic === "عمومی" && input.userText.trim().length < 4) return read();
   const mem = read();
   const at = new Date().toISOString();
   const kind = input.kind || "ask";
@@ -108,8 +118,8 @@ export function noteInteraction(input: {
 
 export function markTopicWeak(topic: string) {
   const mem = read();
-  const t = topic.trim().slice(0, 48);
-  if (!t) return mem;
+  const t = inferTopic(topic);
+  if (!t || t === "عمومی") return mem;
   mem.weakTopics = [t, ...mem.weakTopics.filter((x) => x !== t)].slice(0, 12);
   mem.strongTopics = mem.strongTopics.filter((x) => x !== t);
   mem.updatedAt = new Date().toISOString();
@@ -119,8 +129,8 @@ export function markTopicWeak(topic: string) {
 
 export function markTopicStrong(topic: string) {
   const mem = read();
-  const t = topic.trim().slice(0, 48);
-  if (!t) return mem;
+  const t = inferTopic(topic);
+  if (!t || t === "عمومی") return mem;
   mem.strongTopics = [t, ...mem.strongTopics.filter((x) => x !== t)].slice(0, 12);
   mem.weakTopics = mem.weakTopics.filter((x) => x !== t);
   mem.updatedAt = new Date().toISOString();
@@ -136,16 +146,19 @@ export function clearLearningMemory() {
   write(empty());
 }
 
-/** متن کوتاه برای system prompt */
+/** متن کوتاه برای system prompt — فقط موضوعات پاک‌شده */
 export function learningBriefForPrompt(): string {
   const m = read();
   const top = Object.entries(m.topicCounts)
+    .filter(([k]) => k && k !== "عمومی" && !BLOCKED.test(k))
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([k, n]) => `${k} (${n})`);
+  const weak = m.weakTopics.filter((t) => t && !BLOCKED.test(t)).slice(0, 5);
+  const strong = m.strongTopics.filter((t) => t && !BLOCKED.test(t)).slice(0, 5);
   const parts: string[] = [];
   if (top.length) parts.push(`موضوعات پرتکرار: ${top.join("؛ ")}`);
-  if (m.weakTopics.length) parts.push(`نقاط ضعف اعلام‌شده: ${m.weakTopics.slice(0, 5).join("؛ ")}`);
-  if (m.strongTopics.length) parts.push(`نقاط قوت: ${m.strongTopics.slice(0, 5).join("؛ ")}`);
+  if (weak.length) parts.push(`نقاط ضعف اعلام‌شده: ${weak.join("؛ ")}`);
+  if (strong.length) parts.push(`نقاط قوت: ${strong.join("؛ ")}`);
   return parts.join("\n").slice(0, 700);
 }
