@@ -33,6 +33,7 @@ import { PouyaStage, type StageMood } from "./pouya-stage";
 import { CoachesPane } from "./coaches-pane";
 import { AccountPane } from "./account-pane";
 import { loadProfile } from "@/lib/profile";
+import { canUseChat, incrementChatUsage, loadSubscription } from "@/lib/subscription";
 import type { Assistant } from "@/lib/assistants";
 import { ChatPane, LivePane, QuizPane, VaultPane } from "./pouya-panes";
 import { PouyaVoiceCall, type VoicePhase } from "./pouya-voice-call";
@@ -79,15 +80,8 @@ function spokenSlice(text: string) {
 
 export function PouyaMainApp() {
   const [tab, setTab] = useState<Tab>("chat");
-  const [level, setLevel] = useState<Level>(() => {
-    if (typeof window === "undefined") return "teen";
-    const p = loadProfile().level;
-    return p === "kid" || p === "teen" || p === "adult" ? p : "teen";
-  });
-  const [voiceOn, setVoiceOn] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return Boolean(loadProfile().voiceOn);
-  });
+  const [level, setLevel] = useState<Level>("teen");
+  const [voiceOn, setVoiceOn] = useState(false);
   const [mood, setMood] = useState<StageMood>("idle");
   const [mode, setMode] = useState<ChatMode>("chat");
   const [lang, setLang] = useState<LangCode>("en");
@@ -104,14 +98,9 @@ export function PouyaMainApp() {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const recRef = useRef<BrowserSpeechRecognition | null>(null);
   const [listening, setListening] = useState(false);
-  const [assistantId, setAssistantId] = useState<string | undefined>(() => {
-    if (typeof window === "undefined") return undefined;
-    return loadProfile().preferredAssistantId || undefined;
-  });
-  const [introDone, setIntroDone] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return sessionStorage.getItem(INTRO_KEY) === "1";
-  });
+  const [assistantId, setAssistantId] = useState<string | undefined>(undefined);
+  const [introDone, setIntroDone] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [voiceCall, setVoiceCall] = useState(false);
   const [callMuted, setCallMuted] = useState(false);
   const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
@@ -127,7 +116,25 @@ export function PouyaMainApp() {
   }, [messages]);
 
   useEffect(() => {
+    try {
+      const prof = loadProfile();
+      if (prof.level === "kid" || prof.level === "teen" || prof.level === "adult") setLevel(prof.level);
+      setVoiceOn(Boolean(prof.voiceOn));
+      if (prof.preferredAssistantId) setAssistantId(prof.preferredAssistantId);
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (sessionStorage.getItem(INTRO_KEY) === "1") setIntroDone(true);
+    } catch {
+      /* ignore */
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
     if (!messages.some((x) => x.role === "assistant")) return;
+    if (!messages.some((x) => x.role === "user")) return;
     const saved = upsertChatSession({ id: sessionId, messages });
     if (saved && saved.id !== sessionId) setSessionId(saved.id);
     setHistoryTick((n) => n + 1);
@@ -140,7 +147,6 @@ export function PouyaMainApp() {
     return `${reply}\n\n${diagramTag(d.id)}`;
   }
 
-  /** صدا فقط داخل مکالمه صوتی (کله پویا) — چت و بقیه جاها کاملاً بی‌صدا */
   async function playVoice(text: string) {
     if (!voiceCallRef.current) return;
     const spoken = spokenSlice(text);
@@ -172,7 +178,6 @@ export function PouyaMainApp() {
             finish();
             resolve();
           };
-          // pause() وقتی مکالمه بسته/بی‌صدا شود — وگرنه promise آویزان می‌ماند (H5)
           audio.onpause = () => {
             finish();
             resolve();
@@ -187,6 +192,33 @@ export function PouyaMainApp() {
     } catch {
       voiceActiveRef.current = false;
     }
+    try {
+      if (!window.speechSynthesis) {
+        finish();
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(spoken);
+      u.lang = speakLang;
+      u.rate = 1;
+      voiceActiveRef.current = true;
+      setMood("talk");
+      setVoicePhase("talk");
+      await new Promise<void>((resolve) => {
+        u.onend = () => {
+          finish();
+          resolve();
+        };
+        u.onerror = () => {
+          finish();
+          resolve();
+        };
+        window.speechSynthesis.speak(u);
+      });
+      return;
+    } catch {
+      /* ignore */
+    }
     finish();
   }
 
@@ -200,6 +232,16 @@ export function PouyaMainApp() {
     if (!content && attachment)
       content = `این ${attachment.mime.startsWith("image/") ? "عکس/جزوه" : "فایل"} را بررسی کن.`;
     if ((!content && !attachment) || busy) return;
+    try {
+      const sub = loadSubscription();
+      const gate = canUseChat(sub.planId);
+      if (!gate.ok) {
+        toast.error("سقف گفتگوی امروز این پلن تمام شده. از حساب، پلن بالاتر را فعال کن.");
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
     const useLang = nextLang ?? lang;
     setMode(nextMode);
     if (nextLang) setLang(nextLang);
@@ -250,6 +292,7 @@ export function PouyaMainApp() {
       setMessages([...history, { role: "assistant", content: withFig }]);
       try {
         noteInteraction({ userText: content, kind: "ask" });
+        incrementChatUsage();
       } catch {
         /* ignore */
       }
@@ -307,10 +350,10 @@ export function PouyaMainApp() {
     if (typeof window === "undefined") return [] as { id: string; title: string; when: string }[];
     try {
       return listChatSessions()
-        .filter((s: ChatSession) => s && s.id && Array.isArray(s.messages))
+        .filter((s: ChatSession) => s && s.id && Array.isArray(s.messages) && s.messages.some((m) => m.role === "user"))
         .map((s: ChatSession) => ({
           id: s.id,
-          title: s.topic ? `${s.topic} · ${s.title || "گفتگو"}` : s.title || "گفتگو",
+          title: (s.title || "گفتگو").slice(0, 60),
           when: formatSessionDate(s.updatedAt || s.createdAt || ""),
         }));
     } catch {
@@ -414,6 +457,17 @@ export function PouyaMainApp() {
   async function sendVoice(text: string) {
     const content = text.trim();
     if (!content || busyRef.current) return;
+    try {
+      const sub = loadSubscription();
+      const gate = canUseChat(sub.planId);
+      if (!gate.ok) {
+        toast.error("سقف گفتگوی امروز تمام شده.");
+        setVoicePhase("idle");
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
     stopMic();
     setDraft("");
     const history: ChatMsg[] = [...messagesRef.current, { role: "user", content }];
@@ -440,6 +494,7 @@ export function PouyaMainApp() {
       setMessages([...history, { role: "assistant", content: withFig }]);
       try {
         noteInteraction({ userText: content, kind: "ask" });
+        incrementChatUsage();
       } catch {
         /* ignore */
       }
@@ -518,6 +573,10 @@ export function PouyaMainApp() {
 
   const redShell = tab === "chat" || tab === "live";
 
+  if (!hydrated) {
+    return <div className="min-h-dvh w-full bg-stage" aria-busy="true" />;
+  }
+
   if (!introDone) {
     return (
       <button
@@ -584,6 +643,7 @@ export function PouyaMainApp() {
               }}
               className={cn("pouya-nav-btn", tab === id && "pouya-nav-btn-active")}
               aria-current={tab === id ? "page" : undefined}
+              aria-label={label}
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden />
               <span className="truncate">{label}</span>
