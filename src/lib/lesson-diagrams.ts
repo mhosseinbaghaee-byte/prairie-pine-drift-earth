@@ -266,6 +266,7 @@ function norm(s: string) {
     .trim();
 }
 
+/** مرز کلمه — «موج» داخل «موجودی» و «مدار» داخل «مدارس» نباید بخورد */
 export function matchDiagram(text: string): LessonDiagram | null {
   const t = norm(text);
   if (t.length < 2) return null;
@@ -275,9 +276,11 @@ export function matchDiagram(text: string): LessonDiagram | null {
     let hits = 0;
     for (const k of d.keywords) {
       const key = norm(k);
-      if (!key) continue;
-      if (t.includes(key)) {
-        hits += Math.max(2, Math.min(8, Math.floor(key.length / 2)));
+      if (!key || key.length < 2) continue;
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}([^\\p{L}\\p{N}]|$)`, "u");
+      if (re.test(t)) {
+        hits += key.length >= 4 ? 3 : key.length >= 3 ? 2 : 1;
       }
     }
     if (hits > score) {
@@ -285,7 +288,8 @@ export function matchDiagram(text: string): LessonDiagram | null {
       best = d;
     }
   }
-  return score > 0 ? best : null;
+  // حداقل امتیاز ۲ تا جملات عادی شکل نگیرند
+  return score >= 2 ? best : null;
 }
 
 export function diagramTag(id: string) {
