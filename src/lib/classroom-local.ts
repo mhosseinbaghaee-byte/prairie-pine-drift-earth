@@ -65,28 +65,18 @@ export function createClassroom(input: {
   return item;
 }
 
+/** فقط اگر کد واقعاً توسط معلم ساخته شده باشد موفق می‌شود — کلاس جعلی نمی‌سازد */
 export function joinClassroom(input: {
   code: string;
   title?: string;
 }): LocalClassroom | null {
-  const code = input.code.trim().toUpperCase();
+  const code = input.code.trim().toUpperCase().replace(/\s+/g, "");
   if (code.length < 6) return null;
-  const existing = read().find((c) => c.code === code);
-  if (existing) {
-    const asStudent: LocalClassroom = { ...existing, role: "student" };
-    write([asStudent, ...read().filter((c) => c.code !== code)]);
-    return asStudent;
-  }
-  const item: LocalClassroom = {
-    code,
-    title: input.title?.trim() || `کلاس ${code}`,
-    grade: "",
-    ownerName: "",
-    role: "student",
-    createdAt: new Date().toISOString(),
-  };
-  write([item, ...read()]);
-  return item;
+  const existing = read().find((c) => c.code.toUpperCase() === code);
+  if (!existing) return null; // کد الکی → شکست
+  const asStudent: LocalClassroom = { ...existing, role: "student" };
+  write([asStudent, ...read().filter((c) => c.code.toUpperCase() !== code)]);
+  return asStudent;
 }
 
 export function leaveClassroom(code: string) {
