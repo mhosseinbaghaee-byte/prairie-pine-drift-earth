@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 /** Peak poses from glance.mp4 — same 4-direction clip as cursor-scrub-video. */
@@ -12,6 +12,7 @@ const NEUTRAL_T = 0.18;
 const BLINK_T = 6.28;
 const DEADZONE = 0.1;
 const TAU = 0.18;
+const GLANCE_SRC = "/pouya/glance.mp4";
 
 function rand(min: number, max: number) {
   return min + Math.random() * (max - min);
@@ -36,8 +37,48 @@ function nearestKeyTime(angle: number): number {
 
 function PouyaLivingHead({ track = "window" }: { track?: "window" | "idle" }) {
   const ref = useRef<HTMLVideoElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  /** تا دیده نشود، ۲.۷MB را روی موبایل نکش */
+  const [active, setActive] = useState(false);
 
   useEffect(() => {
+    const root = wrapRef.current;
+    if (!root || active) return;
+    let done = false;
+    const arm = () => {
+      if (done) return;
+      done = true;
+      setActive(true);
+    };
+    const onInteract = () => arm();
+    window.addEventListener("pointerdown", onInteract, { once: true, passive: true });
+    window.addEventListener("touchstart", onInteract, { once: true, passive: true });
+    let io: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== "undefined") {
+      io = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) arm();
+        },
+        { rootMargin: "120px", threshold: 0.01 },
+      );
+      io.observe(root);
+    } else {
+      const t = window.setTimeout(arm, 2000);
+      return () => {
+        window.clearTimeout(t);
+        window.removeEventListener("pointerdown", onInteract);
+        window.removeEventListener("touchstart", onInteract);
+      };
+    }
+    return () => {
+      io?.disconnect();
+      window.removeEventListener("pointerdown", onInteract);
+      window.removeEventListener("touchstart", onInteract);
+    };
+  }, [active]);
+
+  useEffect(() => {
+    if (!active) return;
     const el = ref.current;
     if (!el) return;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -63,8 +104,10 @@ function PouyaLivingHead({ track = "window" }: { track?: "window" | "idle" }) {
     el.addEventListener("seeking", onSeeking);
     el.addEventListener("seeked", onSeeked);
     el.addEventListener("loadedmetadata", onReady);
-    el.addEventListener("canplaythrough", onReady);
-    void el.play().then(() => el.pause()).catch(() => undefined);
+    el.addEventListener("canplay", onReady);
+    el.src = GLANCE_SRC;
+    el.preload = "metadata";
+    el.load();
 
     const setPointerTarget = (clientX: number, clientY: number) => {
       lastPointer = performance.now();
@@ -82,7 +125,10 @@ function PouyaLivingHead({ track = "window" }: { track?: "window" | "idle" }) {
       target = NEUTRAL_T + (nearestKeyTime(angle) - NEUTRAL_T) * eased;
     };
 
-    const onMove = (e: PointerEvent) => setPointerTarget(e.clientX, e.clientY);
+    const onMove = (e: PointerEvent) => {
+      if (reduced || track === "idle") return;
+      setPointerTarget(e.clientX, e.clientY);
+    };
 
     if (track === "window" && !reduced) {
       window.addEventListener("pointermove", onMove, { passive: true });
@@ -119,22 +165,33 @@ function PouyaLivingHead({ track = "window" }: { track?: "window" | "idle" }) {
       el.removeEventListener("seeking", onSeeking);
       el.removeEventListener("seeked", onSeeked);
       el.removeEventListener("loadedmetadata", onReady);
-      el.removeEventListener("canplaythrough", onReady);
+      el.removeEventListener("canplay", onReady);
       el.pause();
     };
-  }, [track]);
+  }, [track, active]);
 
   return (
-    <video
-      ref={ref}
-      src="/pouya/glance.mp4"
-      poster="/pouya/idle.jpg"
-      muted
-      playsInline
-      preload="auto"
-      disableRemotePlayback
-      aria-hidden
-    />
+    <div ref={wrapRef} className="size-full">
+      {active ? (
+        <video
+          ref={ref}
+          poster="/pouya/idle.jpg"
+          muted
+          playsInline
+          preload="metadata"
+          disableRemotePlayback
+          aria-hidden
+          className="size-full object-cover"
+        />
+      ) : (
+        <img
+          src="/pouya/idle.jpg"
+          alt=""
+          className="size-full object-cover"
+          draggable={false}
+        />
+      )}
+    </div>
   );
 }
 
