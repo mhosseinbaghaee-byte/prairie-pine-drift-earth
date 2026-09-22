@@ -48,7 +48,7 @@ export function PouyaStage({
           playsInline
           autoPlay
           loop
-          preload="auto"
+          preload="metadata"
         />
       ) : (
         <img
