@@ -118,7 +118,11 @@ export function saveProfile(patch: Partial<UserProfile>): UserProfile {
     ...patch,
     updatedAt: new Date().toISOString(),
   };
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+  } catch {
+    /* quota / blocked */
+  }
   return next;
 }
 
@@ -135,7 +139,11 @@ export function openAccount(input: { name: string; email: string; phone?: string
     phone: (input.phone || "").trim(),
     createdAt: new Date().toISOString(),
   };
-  localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
+  try {
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
+  } catch {
+    /* quota / blocked */
+  }
   if (next.name) saveProfile({ displayName: next.name });
   return next;
 }
@@ -149,7 +157,11 @@ export function loadSubscription(): LocalSubscription {
 
 export function saveSubscription(patch: Partial<LocalSubscription>): LocalSubscription {
   const next = { ...loadSubscription(), ...patch };
-  localStorage.setItem(SUB_KEY, JSON.stringify(next));
+  try {
+    localStorage.setItem(SUB_KEY, JSON.stringify(next));
+  } catch {
+    /* quota / blocked */
+  }
   return next;
 }
 
