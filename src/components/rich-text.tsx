@@ -167,14 +167,24 @@ function DiagramBlock({ id }: { id: string }) {
   const cleanId = id.trim().toLowerCase();
   if (!cleanId) return null;
   const meta = diagramById(cleanId);
-  const svg = <LessonDiagramSvg id={cleanId} />;
   const gallery = meta?.imageGallery?.filter((g) => g.url && isAllowedImageUrl(g.url)) || [];
   const single = meta?.imageUrl && isAllowedImageUrl(meta.imageUrl) ? meta.imageUrl : undefined;
   const [imgOk, setImgOk] = useState(Boolean(single || gallery.length));
 
-  // بدون meta و بدون svg معتبر → هیچ قاب خالی نساز
-  if (!meta && !svg) return null;
-  if (!svg && !single && gallery.length === 0) return null;
+  // id ناشناخته بدون تصویر → هیچ قاب خالی
+  if (!meta && !single && gallery.length === 0) {
+    // هنوز ممکن است LessonDiagramSvg برای id شناخته‌شده SVG بدهد
+    // فقط اگر meta نباشد و تصویر نباشد، svg را امتحان کن
+  }
+
+  const hasImage = Boolean((single || gallery.length) && imgOk);
+  const showSvgFallback = !hasImage;
+
+  if (!meta && !hasImage) {
+    // id کاملاً نامعتبر
+    const known = Boolean(diagramById(cleanId));
+    if (!known) return null;
+  }
 
   return (
     <figure className="my-2 space-y-2">
@@ -201,9 +211,9 @@ function DiagramBlock({ id }: { id: string }) {
             onError={() => setImgOk(false)}
           />
         </div>
-      ) : (
-        svg
-      )}
+      ) : showSvgFallback && meta ? (
+        <LessonDiagramSvg id={cleanId} />
+      ) : null}
       {meta?.caption ? (
         <figcaption className="text-center text-[11px] text-muted">{meta.caption}</figcaption>
       ) : null}
@@ -217,10 +227,11 @@ function DiagramBlock({ id }: { id: string }) {
 /**
  * فرمت درون‌خطی:
  * - **bold** و `code` مثل قبل
- * - *italic* فقط وقتی * با فاصله/شروع و پایان کلمه باشد — نه 3*4*5
+ * - *italic* فقط برای متن واقعی — نه 3*4*5
  */
 function inlineFormat(text: string): ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|(?<![\w\d*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w\d*]))/g);
+  // اول **bold** و `code` را جدا کن؛ برای *italic* از الگوی محافظه‌کارانه استفاده کن
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, i) => {
     if (!part) return null;
     if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
@@ -237,20 +248,27 @@ function inlineFormat(text: string): ReactNode[] {
         </code>
       );
     }
-    // italic: *word* با مرز کلمه — نه ضرب
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2 && !/^\*[\d.]+\*$/.test(part)) {
-      const inner = part.slice(1, -1);
-      // اگر شبیه عبارت ریاضی است (فقط عدد و عملگر) italic نکن
-      if (/^[\d.\s+\-*/×÷^()]+$/.test(inner)) {
-        return <Fragment key={i}>{part}</Fragment>;
-      }
-      return (
-        <em key={i} className="italic">
-          {inner}
-        </em>
-      );
+    // italic: فقط *کلمه* با فاصله اطراف یا ابتدای رشته — نه ضرب
+    const italicParts = part.split(/(?:^|(?<=\s))\*([^*\n]+?)\*(?=\s|$)/g);
+    if (italicParts.length === 1) {
+      return <Fragment key={i}>{part}</Fragment>;
     }
-    return <Fragment key={i}>{part}</Fragment>;
+    return (
+      <Fragment key={i}>
+        {italicParts.map((seg, j) => {
+          // بخش‌های فرد = محتوای italic (گروه capture)
+          if (j % 2 === 1) {
+            if (/^[\d.\s+\-*/×÷^()]+$/.test(seg)) return <Fragment key={j}>*{seg}*</Fragment>;
+            return (
+              <em key={j} className="italic">
+                {seg}
+              </em>
+            );
+          }
+          return <Fragment key={j}>{seg}</Fragment>;
+        })}
+      </Fragment>
+    );
   });
 }
 
@@ -259,12 +277,13 @@ const GRAPH_RE = /\[graph:([^\]]+)\]/i;
 const SHAPE_RE = /\[shape:[^\]]+\]|```shape:[^`]+```/i;
 
 export function RichText({ text }: { text: string }) {
-  // تگ‌های ناقص ویکی و diagram خالی را از متن خام حذف کن (D5 + I2)
+  // تگ‌های ناقص ویکی و diagram خالی (D5 + I2)
   const cleaned = text
-    .replace(/\[wiki:[^\]]{0,200}$/gi, "") // باز نشده در انتهای متن
+    .replace(/\[wiki:[^\n\]]{0,200}$/gi, "")
     .replace(/\[wiki:\s*\]/gi, "")
     .replace(/\[diagram:\s*\]/gi, "")
-    .replace(/\[graph:\s*\]/gi, "");
+    .replace(/\[graph:\s*\]/gi, "")
+    .replace(/\[wiki:[^\]]{0,200}(?!\])/gi, ""); // تگ باز وسط متن بدون ]
 
   const blocks = cleaned.split(/\n{2,}/);
   return (
@@ -298,7 +317,6 @@ export function RichText({ text }: { text: string }) {
           );
         }
 
-        // عنوان مارک‌داون #
         const headingMatch = block.match(/^\s*(#{1,3})\s+(.+)$/);
         if (headingMatch && !block.includes("\n")) {
           const level = headingMatch[1].length;
@@ -320,7 +338,7 @@ export function RichText({ text }: { text: string }) {
           return (
             <div key={bi} className="space-y-1">
               {pieces.map((p, pi) => {
-                const dm = p.match(/^\[diagram:([^\]*)\]$/i);
+                const dm = p.match(/^\[diagram:([^\]]*)\]$/i);
                 if (dm) {
                   const id = dm[1].trim();
                   return id ? <DiagramBlock key={pi} id={id} /> : null;
