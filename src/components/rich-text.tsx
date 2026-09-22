@@ -3,6 +3,14 @@ import { LessonDiagramSvg } from "./lesson-diagram-svg";
 import { diagramById } from "../lib/lesson-diagrams";
 import { FunctionGraph } from "./function-graph";
 
+const WM_UPLOAD = "https://upload.wikimedia.org/";
+const WM_SPECIAL = "https://commons.wikimedia.org/wiki/Special:FilePath/";
+
+function isAllowedImageUrl(url: string): boolean {
+  const u = url.trim();
+  return u.startsWith(WM_UPLOAD) || u.startsWith(WM_SPECIAL);
+}
+
 function ZoomableImage({
   src,
   alt,
@@ -29,6 +37,8 @@ function ZoomableImage({
       document.body.style.overflow = prev;
     };
   }, [open]);
+
+  if (!isAllowedImageUrl(src)) return null;
 
   return (
     <>
@@ -154,12 +164,16 @@ function ShapeSvg({ kind }: { kind: string }) {
 }
 
 function DiagramBlock({ id }: { id: string }) {
-  const meta = diagramById(id.trim().toLowerCase());
-  const svg = <LessonDiagramSvg id={id} />;
-  const gallery = meta?.imageGallery?.filter((g) => g.url) || [];
-  const single = meta?.imageUrl;
+  const cleanId = id.trim().toLowerCase();
+  if (!cleanId) return null;
+  const meta = diagramById(cleanId);
+  const svg = <LessonDiagramSvg id={cleanId} />;
+  const gallery = meta?.imageGallery?.filter((g) => g.url && isAllowedImageUrl(g.url)) || [];
+  const single = meta?.imageUrl && isAllowedImageUrl(meta.imageUrl) ? meta.imageUrl : undefined;
   const [imgOk, setImgOk] = useState(Boolean(single || gallery.length));
 
+  // بدون meta و بدون svg معتبر → هیچ قاب خالی نساز
+  if (!meta && !svg) return null;
   if (!svg && !single && gallery.length === 0) return null;
 
   return (
@@ -182,7 +196,7 @@ function DiagramBlock({ id }: { id: string }) {
         <div className="overflow-hidden rounded-xl border border-border/40 bg-white">
           <ZoomableImage
             src={single}
-            alt={meta?.title || id}
+            alt={meta?.title || cleanId}
             className="mx-auto max-h-72 w-auto max-w-full object-contain sm:max-h-96"
             onError={() => setImgOk(false)}
           />
@@ -200,48 +214,69 @@ function DiagramBlock({ id }: { id: string }) {
   );
 }
 
+/**
+ * فرمت درون‌خطی:
+ * - **bold** و `code` مثل قبل
+ * - *italic* فقط وقتی * با فاصله/شروع و پایان کلمه باشد — نه 3*4*5
+ */
 function inlineFormat(text: string): ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|(?<![\w\d*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w\d*]))/g);
   return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
+    if (!part) return null;
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
       return (
         <strong key={i} className="font-medium text-fg">
           {part.slice(2, -2)}
         </strong>
       );
     }
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
-      return (
-        <em key={i} className="italic">
-          {part.slice(1, -1)}
-        </em>
-      );
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
       return (
         <code key={i} className="rounded-xs bg-surface px-1 py-0.5 font-mono text-[0.85em]">
           {part.slice(1, -1)}
         </code>
       );
     }
+    // italic: *word* با مرز کلمه — نه ضرب
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2 && !/^\*[\d.]+\*$/.test(part)) {
+      const inner = part.slice(1, -1);
+      // اگر شبیه عبارت ریاضی است (فقط عدد و عملگر) italic نکن
+      if (/^[\d.\s+\-*/×÷^()]+$/.test(inner)) {
+        return <Fragment key={i}>{part}</Fragment>;
+      }
+      return (
+        <em key={i} className="italic">
+          {inner}
+        </em>
+      );
+    }
     return <Fragment key={i}>{part}</Fragment>;
   });
 }
 
-const DIAGRAM_RE = /\[diagram:([^\]]+)\]/i;
+const DIAGRAM_RE = /\[diagram:([^\]]*)\]/i;
 const GRAPH_RE = /\[graph:([^\]]+)\]/i;
 const SHAPE_RE = /\[shape:[^\]]+\]|```shape:[^`]+```/i;
 
 export function RichText({ text }: { text: string }) {
-  const blocks = text.split(/\n{2,}/);
+  // تگ‌های ناقص ویکی و diagram خالی را از متن خام حذف کن (D5 + I2)
+  const cleaned = text
+    .replace(/\[wiki:[^\]]{0,200}$/gi, "") // باز نشده در انتهای متن
+    .replace(/\[wiki:\s*\]/gi, "")
+    .replace(/\[diagram:\s*\]/gi, "")
+    .replace(/\[graph:\s*\]/gi, "");
+
+  const blocks = cleaned.split(/\n{2,}/);
   return (
     <div className="space-y-2 text-pretty">
       {blocks.map((block, bi) => {
-        const diagramOnly = block.match(/^\s*\[diagram:([^\]]+)\]\s*$/i);
+        const diagramOnly = block.match(/^\s*\[diagram:([^\]]*)\]\s*$/i);
         if (diagramOnly) {
+          const id = diagramOnly[1].trim();
+          if (!id) return null;
           return (
             <div key={bi}>
-              <DiagramBlock id={diagramOnly[1]} />
+              <DiagramBlock id={id} />
             </div>
           );
         }
@@ -251,6 +286,7 @@ export function RichText({ text }: { text: string }) {
         if (shapeMatch) {
           const svg = <ShapeSvg kind={shapeMatch[1]} />;
           if (svg) return <div key={bi}>{svg}</div>;
+          return null;
         }
 
         const graphMatch = block.match(/^\s*\[graph:([^\]]+)\]\s*$/i);
@@ -262,13 +298,33 @@ export function RichText({ text }: { text: string }) {
           );
         }
 
+        // عنوان مارک‌داون #
+        const headingMatch = block.match(/^\s*(#{1,3})\s+(.+)$/);
+        if (headingMatch && !block.includes("\n")) {
+          const level = headingMatch[1].length;
+          const cls =
+            level === 1
+              ? "text-lg font-bold text-fg"
+              : level === 2
+                ? "text-base font-semibold text-fg"
+                : "text-sm font-semibold text-fg";
+          return (
+            <p key={bi} className={cls}>
+              {inlineFormat(headingMatch[2])}
+            </p>
+          );
+        }
+
         if (DIAGRAM_RE.test(block) || SHAPE_RE.test(block) || GRAPH_RE.test(block)) {
-          const pieces = block.split(/(\[diagram:[^\]]+\]|\[shape:[^\]]+\]|\[graph:[^\]]+\]|```shape:[^`]+```)/gi);
+          const pieces = block.split(/(\[diagram:[^\]]*\]|\[shape:[^\]]+\]|\[graph:[^\]]+\]|```shape:[^`]+```)/gi);
           return (
             <div key={bi} className="space-y-1">
               {pieces.map((p, pi) => {
-                const dm = p.match(/^\[diagram:([^\]]+)\]$/i);
-                if (dm) return <DiagramBlock key={pi} id={dm[1]} />;
+                const dm = p.match(/^\[diagram:([^\]*)\]$/i);
+                if (dm) {
+                  const id = dm[1].trim();
+                  return id ? <DiagramBlock key={pi} id={id} /> : null;
+                }
                 const gm = p.match(/^\[graph:([^\]]+)\]$/i);
                 if (gm) return <FunctionGraph key={pi} expr={gm[1]} />;
                 const m = p.match(/^\[shape:([^\]]+)\]$/i) || p.match(/^```shape:([^`]+)```$/i);
@@ -291,6 +347,7 @@ export function RichText({ text }: { text: string }) {
               {pieces.map((p, pi) => {
                 const im = p.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
                 if (im) {
+                  if (!isAllowedImageUrl(im[2])) return null;
                   return (
                     <ZoomableImage
                       key={pi}
