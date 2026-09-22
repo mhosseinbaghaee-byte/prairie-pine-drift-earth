@@ -14,7 +14,7 @@ export function Input({ className, ...props }: React.ComponentProps<"input">) {
   );
 }
 
-export function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
+export function Textarea({ className, "aria-label": ariaLabel, placeholder, ...props }: React.ComponentProps<"textarea">) {
   return (
     <textarea
       className={cn(
@@ -22,6 +22,8 @@ export function Textarea({ className, ...props }: React.ComponentProps<"textarea
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
+      aria-label={ariaLabel || (typeof placeholder === "string" ? placeholder : "متن پیام")}
+      placeholder={placeholder}
       {...props}
     />
   );
