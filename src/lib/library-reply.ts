@@ -7,6 +7,14 @@ export function localTutorReply(opts: {
 }): string {
   const lastRaw = opts.messages[opts.messages.length - 1]?.content ?? "";
   const last = lastRaw.trim();
+  // ایمنی آفلاین
+  if (/(خودمو?\s*بکشم|خودکشی|میخوام\s*بمیرم|کتک\s*میزنه|سوءاستفاده)/.test(last)) {
+    return (
+      "متأسفم که این حس را داری. تو تنها نیستی.\n\n" +
+      "لطفاً با یک بزرگ‌تر مورد اعتماد حرف بزن یا با اورژانس اجتماعی (۱۲۳) تماس بگیر.\n" +
+      "من جای انسان واقعی نیستم، اما برای سؤال درسی اینجام."
+    );
+  }
   const lastLower = last.toLowerCase();
   const prevAssistant = [...opts.messages].reverse().find((m) => m.role === "assistant")?.content ?? "";
   const userTurns = opts.messages.filter((m) => m.role === "user");
