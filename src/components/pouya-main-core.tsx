@@ -79,8 +79,15 @@ function spokenSlice(text: string) {
 
 export function PouyaMainApp() {
   const [tab, setTab] = useState<Tab>("chat");
-  const [level, setLevel] = useState<Level>("teen");
-  const [voiceOn, setVoiceOn] = useState(false);
+  const [level, setLevel] = useState<Level>(() => {
+    if (typeof window === "undefined") return "teen";
+    const p = loadProfile().level;
+    return p === "kid" || p === "teen" || p === "adult" ? p : "teen";
+  });
+  const [voiceOn, setVoiceOn] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(loadProfile().voiceOn);
+  });
   const [mood, setMood] = useState<StageMood>("idle");
   const [mode, setMode] = useState<ChatMode>("chat");
   const [lang, setLang] = useState<LangCode>("en");
@@ -239,7 +246,6 @@ export function PouyaMainApp() {
           : localTutorReply({ messages: history.slice(-12), mode: nextMode, lang: useLang });
       const withFig = ensureDiagram(content, reply);
       setMood("talk");
-      // فقط در مکالمه صوتی صدا؛ چت بی‌صدا
       if (voiceCallRef.current) void playVoice(withFig);
       setMessages([...history, { role: "assistant", content: withFig }]);
       try {
@@ -576,10 +582,7 @@ export function PouyaMainApp() {
                 if (id === "live") setMode("live");
                 else if (id === "chat") setMode("chat");
               }}
-              className={cn(
-                "pouya-nav-btn",
-                tab === id && "pouya-nav-btn-active",
-              )}
+              className={cn("pouya-nav-btn", tab === id && "pouya-nav-btn-active")}
               aria-current={tab === id ? "page" : undefined}
             >
               <Icon className="h-4 w-4 shrink-0" aria-hidden />
@@ -624,10 +627,7 @@ export function PouyaMainApp() {
         {tab === "quiz" ? <QuizPane level={level} /> : null}
         {tab === "vault" ? <VaultPane /> : null}
         {tab === "coaches" ? (
-          <CoachesPane
-            selectedId={assistantId}
-            onSelect={(a: Assistant) => setAssistantId(a.id)}
-          />
+          <CoachesPane selectedId={assistantId} onSelect={(a: Assistant) => setAssistantId(a.id)} />
         ) : null}
         {tab === "account" ? (
           <AccountPane
