@@ -31,7 +31,7 @@ function compile(expr: string): ((x: number) => number) | null {
   e = e.replace(/x\(/g, "x*(");
   e = e.replace(/(\d)\(/g, "$1*(");
   // فقط کاراکترهای مجاز بعد از جایگزینی
-  if (/[^0-9xMath.\+\-\*\(\)_,PIexpnclogabsinqrt]/.test(e.replace(/\*\*/g, ""))) return null;
+  if (/[^0-9xMath.+\-*()_,PIexpnclogabsinqrt]/.test(e.replace(/\*\*/g, ""))) return null;
   try {
     // eslint-disable-next-line no-new-func
     const fn = new Function("x", `return (${e});`) as (x: number) => number;

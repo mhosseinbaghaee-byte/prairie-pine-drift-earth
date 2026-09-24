@@ -164,18 +164,15 @@ function ShapeSvg({ kind }: { kind: string }) {
 }
 
 function DiagramBlock({ id }: { id: string }) {
+  // useState همیشه باید قبل از هر return زودهنگام صدا زده شود (قانون Hooks)؛
+  // اگر id هنگام تایپ شدن استریم‌شدن پاسخ موقتاً خالی باشد و بعد پر شود، ترتیب هوک‌ها نباید عوض شود.
   const cleanId = id.trim().toLowerCase();
-  if (!cleanId) return null;
   const meta = diagramById(cleanId);
   const gallery = meta?.imageGallery?.filter((g) => g.url && isAllowedImageUrl(g.url)) || [];
   const single = meta?.imageUrl && isAllowedImageUrl(meta.imageUrl) ? meta.imageUrl : undefined;
   const [imgOk, setImgOk] = useState(Boolean(single || gallery.length));
 
-  // id ناشناخته بدون تصویر → هیچ قاب خالی
-  if (!meta && !single && gallery.length === 0) {
-    // هنوز ممکن است LessonDiagramSvg برای id شناخته‌شده SVG بدهد
-    // فقط اگر meta نباشد و تصویر نباشد، svg را امتحان کن
-  }
+  if (!cleanId) return null;
 
   const hasImage = Boolean((single || gallery.length) && imgOk);
   const showSvgFallback = !hasImage;
