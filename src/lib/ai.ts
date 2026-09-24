@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { localQuiz, localTutorReply, todayFact, type QuizPayload, type QuizQuestion } from "./library";
+import { localQuiz, localTutorReply, todayFact, SAFETY_RE, safetyReply, type QuizPayload, type QuizQuestion } from "./library";
 import { langById, type Level } from "./topics";
 import { assistantSystemExtra } from "./assistants";
 import { LESSON_DIAGRAMS, diagramTag, matchDiagram } from "./lesson-diagrams";
@@ -51,7 +51,8 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 type ChatResult = { ok: true; text: string; provider?: string } | { ok: false; error: string };
 type ProviderId = "bank" | "openai" | "gemini";
 
-const DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+// gemini-2.0-flash و gemini-1.5-flash خاموش شده‌اند؛ در پیش‌فرض کد نگذار (env می‌تواند override کند)
+const DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
 function geminiModels(): string[] {
   const raw = process.env.GEMINI_MODELS;
   const list = raw ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
@@ -297,16 +298,9 @@ export const askPouya = createServerFn({ method: "POST" })
         m.role === "assistant" ? { ...m, content: m.content.replace(/!\[[^\]]*\]\([^)]*\)/g, "[تصویر]") } : m,
       );
 
-      // ایمنی آفلاین قبل از هر چیز
-      if (/(خودمو?\s*بکشم|خودکشی|میخوام\s*بمیرم|کتک\s*میزنه|سوءاستفاده)/.test(lastUser)) {
-        return {
-          ok: true as const,
-          text:
-            "متأسفم که این حس را داری. تو تنها نیستی.\n\n" +
-            "لطفاً با یک بزرگ‌تر مورد اعتماد حرف بزن یا با اورژانس اجتماعی (۱۲۳) تماس بگیر.\n" +
-            "من جای انسان واقعی نیستم، اما برای سؤال درسی اینجام.",
-          provider: "safety",
-        };
+      // ایمنی؛ قبل از هر چیز، مستقل از وضعیت هیچ مدلی
+      if (SAFETY_RE.test(lastUser)) {
+        return { ok: true as const, text: safetyReply(), provider: "safety" };
       }
 
       if (!hasImage && !short && isBankWorthyQuestion(lastUser)) {
@@ -387,25 +381,54 @@ export const speakPouya = createServerFn({ method: "POST" })
         .replace(/\/+$/, "")
         .replace(/\/audio\/speech$/, "");
       if (!key) return { ok: false as const, error: "no_tts_key" };
-      const model = process.env.OPENAI_TTS_MODEL || "tts-1";
+      // لیارا مدل را با پیشوند provider می‌خواهد (openai/tts-1)؛ OpenAI اصلی بدون پیشوند.
+      // اسم درست را نمی‌دانیم مگر اینکه env صریحاً بگوید، پس چند حالت رایج را امتحان می‌کنیم.
+      const models = [
+        process.env.OPENAI_TTS_MODEL,
+        "openai/tts-1",
+        "tts-1",
+      ].filter((m, idx, arr): m is string => Boolean(m) && arr.indexOf(m) === idx);
       const voice = process.env.OPENAI_TTS_VOICE || "echo";
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      let res: Response;
-      try {
-        res = await fetch(`${baseUrl}/audio/speech`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model, voice, input: text, response_format: "mp3" }),
-          signal: controller.signal,
-        });
-      } finally {
-        clearTimeout(timeout);
+      const deadline = Date.now() + 12000;
+      let lastError = "tts_unavailable";
+      for (const model of models) {
+        if (Date.now() > deadline) {
+          logAi("tts deadline reached", model);
+          break;
+        }
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 9000);
+        try {
+          const res = await fetch(`${baseUrl}/audio/speech`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model, voice, input: text, response_format: "mp3" }),
+            signal: controller.signal,
+          });
+          if (!res.ok) {
+            const body = (await res.text().catch(() => "")).slice(0, 300);
+            logAi("tts http", res.status, model, body);
+            lastError = `tts_${res.status}`;
+            if (res.status === 401 || res.status === 403 || res.status === 429) break;
+            continue;
+          }
+          const buf = Buffer.from(await res.arrayBuffer());
+          if (buf.length < 200) {
+            logAi("tts tiny response", buf.length, model);
+            lastError = "tts_empty";
+            continue;
+          }
+          return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
+        } catch (err) {
+          logAi("tts exception", model, err instanceof Error ? err.message : String(err));
+          lastError = "tts_fail";
+        } finally {
+          clearTimeout(timeout);
+        }
       }
-      if (!res.ok) return { ok: false as const, error: `tts_${res.status}` };
-      const buf = Buffer.from(await res.arrayBuffer());
-      return { ok: true as const, audio: buf.toString("base64"), mime: "audio/mpeg" };
-    } catch {
+      return { ok: false as const, error: lastError };
+    } catch (err) {
+      logAi("tts outer exception", err instanceof Error ? err.message : String(err));
       return { ok: false as const, error: "tts_fail" };
     }
   });
