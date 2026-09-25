@@ -63,10 +63,10 @@ export function titleFromMessages(messages: StoredChatMsg[]): string {
   const firstUser = messages.find((m) => m.role === "user")?.content?.trim();
   if (firstUser) {
     const line = firstUser.split("\n").map((l) => l.trim()).find(Boolean) || firstUser;
-    return line.replace(/[*`#_\[\]]/g, "").replace(/diagram:[a-z_]+/gi, "").slice(0, 48) || "گفتگو";
+    return line.replace(/[*`#_[\]]/g, "").replace(/diagram:[a-z_]+/gi, "").slice(0, 48) || "گفتگو";
   }
   const firstAsst = messages.find((m) => m.role === "assistant")?.content?.trim();
-  if (firstAsst) return firstAsst.replace(/[*`#_\[\]]/g, "").slice(0, 48);
+  if (firstAsst) return firstAsst.replace(/[*`#_[\]]/g, "").slice(0, 48);
   return "گفتگوی تازه";
 }
 

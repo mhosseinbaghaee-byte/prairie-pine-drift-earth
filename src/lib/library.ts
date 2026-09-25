@@ -10,4 +10,4 @@ export {
   localDaily,
   localLanguage,
 } from "./library-data";
-export { localTutorReply } from "./library-reply";
+export { localTutorReply, SAFETY_RE, safetyReply } from "./library-reply";
